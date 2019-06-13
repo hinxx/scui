@@ -43,14 +43,23 @@ CXXFLAGS += -I./gl3w
 # CXXFLAGS = -I../libs/glad/include -DIMGUI_IMPL_OPENGL_LOADER_GLAD
 
 ##---------------------------------------------------------------------
+## SCUI SOURCES
+##---------------------------------------------------------------------
+SOURCES += ./scard_impl.c
+
+##---------------------------------------------------------------------
 ## BUILD FLAGS PER PLATFORM
 ##---------------------------------------------------------------------
 
 ifeq ($(UNAME_S), Linux) #LINUX
 	ECHO_MESSAGE = "Linux"
 	LIBS += -lGL `pkg-config --static --libs glfw3`
+    LIBS += `pkg-config --libs libpcsclite`
 
 	CXXFLAGS += `pkg-config --cflags glfw3`
+    # use system pcsc lite files
+    ## CXXFLAGS += `pkg-config --variable=includedir libpcsclite`
+    CXXFLAGS += `pkg-config --cflags libpcsclite`
 	CFLAGS = $(CXXFLAGS)
 endif
 
