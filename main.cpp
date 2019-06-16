@@ -122,13 +122,14 @@ int main(int, char**)
     // SCard initialize
     scard_init();
 
-    scard_reader_find();
+  //  scard_reader_find();
+    scard_reader_start_thread();
 
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
         // see if the SCard reader if present
-        scard_reader_present();
+//        scard_reader_present();
 
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
@@ -191,6 +192,8 @@ int main(int, char**)
         glfwSwapBuffers(window);
     }
 
+    scard_reader_stop_thread();
+    
     // SCard destroy
     scard_destroy();
 

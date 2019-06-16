@@ -15,18 +15,15 @@ static char *pcsc_stringify_error(LONG rv)
 }
 #endif
 
-// formated printout
-#if 0
-#define TRC(s) \
-    fprintf(stderr, "[TRC] %s(): %s\n", __func__, s);
-#define TRCI(s, i) \
-    fprintf(stderr, "[TRC] %s(): %s (%d)\n", __func__, s, i);
-#endif
-
-#define TRC(...) fprintf(stderr, "[TRC] " __VA_ARGS__)
-#define DBG(...) fprintf(stderr, "[DBG] " __VA_ARGS__)
-#define INF(...) fprintf(stderr, "[INF] " __VA_ARGS__)
-#define ERR(...) fprintf(stderr, "[ERR] " __VA_ARGS__)
+// formated logging
+#define _LOG(x, ...) { \
+    fprintf(stderr, "[%s] %s():%d : ", x, __func__, __LINE__); \
+    fprintf(stderr, __VA_ARGS__); \
+    }
+#define TRC(...) { _LOG("TRC", __VA_ARGS__) }
+#define DBG(...) { _LOG("DBG", __VA_ARGS__) }
+#define INF(...) { _LOG("INF", __VA_ARGS__) }
+#define ERR(...) { _LOG("ERR", __VA_ARGS__) }
 
 // check status and print error if any
 #define CHECK(f, rv) \
@@ -50,6 +47,9 @@ static char *pcsc_stringify_error(LONG rv)
 
 static SCARDCONTEXT g_scard_context = 0;
 static char g_reader_name[MAX_READERNAME] = {0};
+static pthread_t g_reader_thread = 0;
+// static bool g_run = false;
+static pthread_mutex_t g_reader_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 LONG scard_init()
 {
@@ -190,4 +190,118 @@ bool scard_reader_present()
 
     TRC("Leave true\n");
     return true;
+}
+
+/**
+ * Try to get the reader name.
+ * 
+ * If reader is attached then the global variable shall be updated
+ * with reader name, otherwise the global reader will be reset, indicating
+ * that there is no reader present.
+ *
+ * If present, reader name shall be 'ACS ACR38U-CCID 00 00' (under Linux)
+ * of '???' (under Windows).
+ *
+ * Note that the code does not expect more than one reader in the system!
+ */
+static void reader_probe()
+{
+    LONG rv;
+    DWORD dwReaders = MAX_READERNAME;
+    BYTE mszReaders[MAX_READERNAME] = {0};
+    LPSTR mszGroups = NULL;
+
+    rv = SCardListReaders(g_scard_context, mszGroups, (LPSTR)&mszReaders, &dwReaders);
+    // DBG("RV = 0x%08lX\n", rv);
+    if (rv == SCARD_S_SUCCESS) {
+        // reader arrived
+        DBG("reader arrived ..\n");
+    } else if (rv == SCARD_E_NO_READERS_AVAILABLE) {
+        // reader left
+        DBG("reader left ..\n");
+    }
+
+    // save reader name (NULL if not detected)
+    pthread_mutex_lock(&g_reader_mutex);
+    strncpy(g_reader_name, (LPCSTR)mszReaders, MAX_READERNAME);
+    INF("reader name '%s'\n", g_reader_name);
+    pthread_mutex_unlock(&g_reader_mutex);
+}
+
+/**
+ * Thread routine which waits for change in reader state. 
+ * @param  ptr NULL
+ * @return     ???
+ */
+static void *reader_detect(void *ptr)
+{
+    LONG rv;
+    SCARD_READERSTATE rgReaderStates[1];
+
+    TRC("Enter\n");
+
+    // try to get the reader name before waiting for notification
+    // to arrive; detects already connected reader 
+    reader_probe();
+
+    while (1) {
+        TRC("loop, waiting for reader to arrive or leave ..\n");
+        (void)fflush(stdout);
+        rgReaderStates[0].szReader = "\\\\?PnP?\\Notification";
+        rgReaderStates[0].dwCurrentState = SCARD_STATE_UNAWARE;
+
+        // SCardGetStatusChange() will exit on reader to arrival or departure
+        rv = SCardGetStatusChange(g_scard_context, INFINITE, rgReaderStates, 1);
+        CHECK("SCardGetStatusChange", rv);
+
+        // if the wait was cancelled (i.e. exiting the app), exit the thread!
+        if (rv == SCARD_E_CANCELLED) {
+            TRC("stopping thread ..\n");
+            break;
+        }
+
+        // try to get the reader name now that the notification arrived
+        reader_probe();
+    }
+
+    TRC("Leave 0\n");
+    return 0;
+}
+
+/**
+ * Start the reader detection thread.
+ * @return 0 - success, 1 - failure
+ */
+LONG scard_reader_start_thread()
+{
+    TRC("Enter\n");
+
+    int rv = pthread_create(&g_reader_thread, NULL, reader_detect, NULL);
+    if (rv) {
+        ERR("Error - pthread_create() return code: %d\n", rv);
+        TRC("Leave 1\n");
+        return 1;
+    }
+
+    TRC("Leave 0\n");
+    return 0;
+}
+
+/**
+ * Stop the reader detection thread.
+ * @return 0 - success, 1 - failure
+ */
+LONG scard_reader_stop_thread()
+{
+    TRC("Enter\n");
+
+    // cancel waiting SCardEstablishContext() inside the thread
+    if (g_scard_context) {
+        LONG rv = SCardCancel(g_scard_context);
+        CHECK("SCardCancel", rv);
+    }
+    pthread_join(g_reader_thread, NULL);
+
+    TRC("Leave 0\n");
+    return 0;
 }

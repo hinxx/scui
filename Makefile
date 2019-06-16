@@ -60,6 +60,7 @@ ifeq ($(UNAME_S), Linux) #LINUX
     # use system pcsc lite files
     ## CXXFLAGS += `pkg-config --variable=includedir libpcsclite`
     CXXFLAGS += `pkg-config --cflags libpcsclite`
+    CXXFLAGS += -lpthread
 	CFLAGS = $(CXXFLAGS)
 endif
 

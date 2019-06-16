@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
+#include <unistd.h>
 
 // PC/SC lite
 #ifdef __APPLE__
@@ -27,5 +29,7 @@ LONG scard_init();
 LONG scard_destroy();
 LONG scard_reader_find();
 bool scard_reader_present();
+LONG scard_reader_start_thread();
+LONG scard_reader_stop_thread();
 
 #endif // SCARD_IMPL_H_
