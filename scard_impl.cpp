@@ -48,7 +48,6 @@ static char *pcsc_stringify_error(LONG rv)
 static SCARDCONTEXT g_scard_context = 0;
 static char g_reader_name[MAX_READERNAME] = {0};
 static pthread_t g_reader_thread = 0;
-// static bool g_run = false;
 static pthread_mutex_t g_reader_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 LONG scard_init()
@@ -77,6 +76,7 @@ LONG scard_destroy()
     return 0;
 }
 
+#if 0
 LONG scard_reader_find()
 {
     SCARD_READERSTATE rgReaderStates[1];
@@ -191,6 +191,7 @@ bool scard_reader_present()
     TRC("Leave true\n");
     return true;
 }
+#endif
 
 /**
  * Try to get the reader name.
@@ -236,7 +237,7 @@ static void reader_probe()
 static void *reader_detect(void *ptr)
 {
     LONG rv;
-    SCARD_READERSTATE rgReaderStates[1];
+    SCARD_READERSTATE rgReaderStates[1] = {0};
 
     TRC("Enter\n");
 
@@ -249,10 +250,14 @@ static void *reader_detect(void *ptr)
         (void)fflush(stdout);
         rgReaderStates[0].szReader = "\\\\?PnP?\\Notification";
         rgReaderStates[0].dwCurrentState = SCARD_STATE_UNAWARE;
+        rgReaderStates[0].dwEventState = SCARD_STATE_UNAWARE;
 
         // SCardGetStatusChange() will exit on reader to arrival or departure
         rv = SCardGetStatusChange(g_scard_context, INFINITE, rgReaderStates, 1);
-        CHECK("SCardGetStatusChange", rv);
+        CHECK("1 SCardGetStatusChange", rv);
+        DBG("1 RV = 0x%08lX\n", rv);
+        DBG("1 dwEventState:   0x%08lX\n", rgReaderStates[0].dwEventState);
+        DBG("1 dwCurrentState: 0x%08lX\n", rgReaderStates[0].dwCurrentState);
 
         // if the wait was cancelled (i.e. exiting the app), exit the thread!
         if (rv == SCARD_E_CANCELLED) {
@@ -262,11 +267,105 @@ static void *reader_detect(void *ptr)
 
         // try to get the reader name now that the notification arrived
         reader_probe();
+
+        // if reader is present check for the card
+        if (strlen(g_reader_name)) {
+            TRC("checking for card presence ..\n");
+            // assume card is not present, and ask for status update!
+            // if the card is in, the SCardGetStatusChange() will immediately exit,
+            // if the card is out, SCardGetStatusChange() will block infinitely until card arrives..
+            // use SCardCancel() to break out of infinite wait
+            DBG("reader name %s\n", g_reader_name);
+            rgReaderStates[0].szReader = g_reader_name;
+            rgReaderStates[0].dwCurrentState = SCARD_STATE_EMPTY;
+            rgReaderStates[0].dwEventState = SCARD_STATE_UNAWARE;
+            DBG("2a dwEventState:   0x%08lX\n", rgReaderStates[0].dwEventState);
+            DBG("2a dwCurrentState: 0x%08lX\n", rgReaderStates[0].dwCurrentState);
+            rv = SCardGetStatusChange(g_scard_context, INFINITE, rgReaderStates, 1);
+            CHECK("3 SCardGetStatusChange", rv);
+            DBG("2b RV = 0x%08lX\n", rv);
+            DBG("2b dwEventState:   0x%08lX\n", rgReaderStates[0].dwEventState);
+            DBG("2b dwCurrentState: 0x%08lX\n", rgReaderStates[0].dwCurrentState);
+#if 0
+            // XXX: should use rv return status code?
+            // in case of disconnected reader event state remains unaltered
+            if (rgReaderStates[0].dwEventState == SCARD_STATE_UNAWARE) {
+                // qCritical() << "reader status not received, reader removed?";
+                // reader_forget();
+                // card_forget();
+                // return false;
+            } else {
+
+                if (rv == SCARD_S_SUCCESS) {
+                    //reader responded, check the event state for card status
+                    if (rgReaderStates[0].dwEventState & SCARD_STATE_PRESENT) {
+                        DBG("card present!\n");
+                    } else if (rgReaderStates[0].dwEventState & SCARD_STATE_EMPTY) {
+                        DBG("card absent!\n");
+                    } else {
+                        ERR("unexpected event state?!?!\n");
+                    }
+                }
+            }
+#endif
+        }
     }
 
     TRC("Leave 0\n");
     return 0;
 }
+
+#if 0
+static void *card_access(void *ptr)
+{
+    LONG rv;
+    SCARD_READERSTATE rgReaderStates[1];
+    // BYTE reader_name[MAX_READERNAME] = {0};
+
+    TRC("Enter\n");
+
+    while (1) {
+        TRC("waiting for reader to arrive..\n");
+        pthread_mutex_lock(&g_reader_mutex);
+        pthread_cond_wait(&g_card_cond, &g_reader_mutex);
+        pthread_mutex_unlock(&g_reader_mutex);
+        TRC("reader arrived!!!\n");
+        TRC("loop, waiting for card to arrive or leave ..\n");
+        rgReaderStates[0].szReader = g_reader_name;
+        rgReaderStates[0].dwCurrentState = SCARD_STATE_UNAWARE;
+        rgReaderStates[0].dwEventState = SCARD_STATE_UNAWARE;
+
+        DBG("reader name %s\n", g_reader_name);
+        rv = SCardGetStatusChange(g_scard_context, 0, rgReaderStates, 1);
+        CHECK("SCardGetStatusChange", rv);
+        DBG("RV = 0x%08lX\n", rv);
+        DBG("dwEventState: 0x%08lX\n", rgReaderStates[0].dwEventState);
+        // XXX: should use rv return status code?
+        // in case of disconnected reader event state remains unaltered
+        if (rgReaderStates[0].dwEventState == SCARD_STATE_UNAWARE) {
+            // qCritical() << "reader status not received, reader removed?";
+            // reader_forget();
+            // card_forget();
+            // return false;
+        } else {
+
+            if (rv == SCARD_S_SUCCESS) {
+                //reader responded, check the event state for card status
+                if (rgReaderStates[0].dwEventState & SCARD_STATE_PRESENT) {
+                    DBG("card present!\n");
+                } else if (rgReaderStates[0].dwEventState & SCARD_STATE_EMPTY) {
+                    DBG("card absent!\n");
+                } else {
+                    ERR("unexpected event state?!?!\n");
+                }
+            }
+        }
+    }
+
+    TRC("Leave 0\n");
+    return 0;
+}
+#endif
 
 /**
  * Start the reader detection thread.
