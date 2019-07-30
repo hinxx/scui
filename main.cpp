@@ -31,7 +31,7 @@
 #endif
 
 // SCard API
-#include "scard_impl.h"
+#include "sc.h"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -121,17 +121,11 @@ int main(int, char**)
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // SCard initialize
-    scard_init();
-
-  //  scard_reader_find();
-    scard_reader_start_thread();
+    sc_init();
 
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
-        // see if the SCard reader if present
-//        scard_reader_present();
-
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
         // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
@@ -193,10 +187,8 @@ int main(int, char**)
         glfwSwapBuffers(window);
     }
 
-    scard_reader_stop_thread();
-
     // SCard destroy
-    scard_destroy();
+    sc_destroy();
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
