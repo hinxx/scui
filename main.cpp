@@ -138,6 +138,16 @@ int main(int, char**)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // SCard window
+        {
+            ImGui::Begin("sole UI 0.0.1");                          // Create a window called "Hello, world!" and append into it.
+
+            ImGui::Text("Reader attached: %s (%s)", sc_is_reader_attached() ? "YES" : "NO", sc_reader_name());      // Edit bools storing our window open/close state
+            ImGui::Text("Card inserted: %s", sc_is_card_inserted() ? "YES" : "NO");      // Edit bools storing our window open/close state
+
+            ImGui::End();            
+        }
+
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
