@@ -16,6 +16,8 @@ static pthread_mutex_t g_sc_reader_mutex = PTHREAD_MUTEX_INITIALIZER;
 // static BOOL g_sc_card_connected = 0;
 // static SCARDHANDLE g_sc_card_handle = 0;
 static PSCARD_IO_REQUEST g_sc_pci= 0;
+static char l_hexbuf[3*SC_BUFFER_MAXLEN] = {0};
+
 
 LONG sc_create_context(PSCARDCONTEXT context)
 {
@@ -180,4 +182,64 @@ void sc_card_disconnect(PSCARDHANDLE handle)
     g_sc_pci = 0;
     *handle = 0;
     DBG("disconnected from card!\n");
+}
+
+static void sc_buffer_to_hex(LPBYTE data, ULONG len)
+{
+    int off = 0;
+    memset(l_hexbuf, 0, 3*SC_BUFFER_MAXLEN);
+    for (ULONG i = 0; i < len; i++) {
+        off += sprintf(l_hexbuf + off, "%02X ", data[i]);
+    }
+}
+
+LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG send_len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+{
+    // dump request
+    sc_buffer_to_hex(send_data, send_len);
+    DBG("SEND: [%lu]: %s\n", send_len, l_hexbuf);
+
+    BYTE tmp_buf[SC_BUFFER_MAXLEN];
+    // SW1 and SW2 will be added at the end of the response
+    ULONG tmp_len = *recv_len + 2;
+    assert(g_sc_pci != 0);
+    ULONG rv = SCardTransmit(handle, g_sc_pci, send_data, send_len, NULL, tmp_buf, &tmp_len);
+    CHECK("SCardTransmit", rv);
+    if (rv != SCARD_S_SUCCESS) {
+        return rv;
+    }
+    // dump response
+    sc_buffer_to_hex(tmp_buf, tmp_len);
+    DBG("RECV: [%lu]: %s\n", tmp_len, l_hexbuf);
+
+    // SW1 and SW2 are at the end of response
+    tmp_len -= 2;
+    // update receive data and length
+    memcpy(recv_data, tmp_buf, tmp_len);
+    memcpy(sw_data, tmp_buf + tmp_len, 2);
+    *recv_len = tmp_len;
+
+    return rv;
+}
+
+LONG sc_check_sw(const LPBYTE sw_data, const BYTE sw1, const BYTE sw2)
+{
+    if ((sw_data[0] == sw1) && (sw_data[1] == sw2)) {
+        DBG("card xfer OK!\n");
+        return SCARD_S_SUCCESS;
+    }
+    // XXX: anything to do here if SW is not success.. print error?
+    //      which SW error codes are possible?
+    ERR("card xfer failed: %02X %02X\n", sw_data[0], sw_data[1]);
+
+    return SCARD_F_UNKNOWN_ERROR;
+}
+
+LONG sc_reader_get_info(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+{
+    // REF-ACR38x-CCID-6.05.pdf, 9.4.1. GET_READER_INFORMATION
+    BYTE send_data[] = {0xFF, 0x09, 0x00, 0x00, 0x10};
+    ULONG send_len = sizeof(send_data);
+    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    return rv;
 }

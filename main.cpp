@@ -153,14 +153,18 @@ int main(int, char**)
             ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_reader_name());      // Edit bools storing our window open/close state
             ImGui::Text("Card inserted: %s", have_card ? "YES" : "NO");      // Edit bools storing our window open/close state
 
-            if (ImGui::Button("Connect Dummy")) {
+            if (ImGui::Button("Card connect")) {
                 req_id = sc_request_connect();
             }
 
-            if (ImGui::Button("Disconnect Dummy")) {
+            if (ImGui::Button("Card disconnect")) {
                 req_id = sc_request_disconnect();
             }
-            
+
+            if (ImGui::Button("Get reader info")) {
+                req_id = sc_request_reader_info();
+            }
+
             connected_card = sc_is_card_connected();
             ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");      // Edit bools storing our window open/close state
 
