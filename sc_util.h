@@ -78,5 +78,6 @@ LONG sc_select_memory_card(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *re
 LONG sc_read_card(const SCARDHANDLE handle, BYTE address, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
 LONG sc_get_error_counter(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
 LONG sc_present_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+LONG sc_change_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
 
 #endif // SC_UTIL_H_

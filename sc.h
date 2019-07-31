@@ -24,5 +24,6 @@ LONG sc_request_select_card();
 LONG sc_request_read_card();
 LONG sc_request_error_counter();
 LONG sc_request_present_pin();
+LONG sc_request_change_pin();
 
 #endif // SC_H_
