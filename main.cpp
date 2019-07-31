@@ -185,6 +185,10 @@ int main(int, char**)
                 req_id = sc_request_change_pin();
             }
 
+            if (ImGui::Button("Write memory card")) {
+                req_id = sc_request_write_card();
+            }
+
             connected_card = sc_is_card_connected();
             ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");
 

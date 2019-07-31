@@ -292,3 +292,19 @@ LONG sc_change_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG
     LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
     return rv;
 }
+
+LONG sc_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+{
+    // REF-ACR38x-CCID-6.05.pdf, 9.3.6.5. WRITE_MEMORY_CARD
+    BYTE send_data[SC_BUFFER_MAXLEN];
+    send_data[0] = 0xFF;
+    send_data[1] = 0xD0;
+    send_data[2] = 0x00;
+    send_data[3] = address;
+    send_data[4] = len;
+    assert(len + 5 <= SC_BUFFER_MAXLEN);
+    memcpy(&send_data[5], data, len);
+    ULONG send_len = len + 5;
+    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    return rv;
+}

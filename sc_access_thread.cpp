@@ -18,6 +18,7 @@ static pthread_cond_t l_condition = PTHREAD_COND_INITIALIZER;
 #define SC_REQUEST_ERROR_COUNTER       6
 #define SC_REQUEST_PRESENT_PIN         7
 #define SC_REQUEST_CHANGE_PIN          8
+#define SC_REQUEST_WRITE_CARD          9
 
 static ULONG l_req_id = 0;
 static ULONG l_req_id_handled = 0;
@@ -207,9 +208,11 @@ ULONG sc_request_error_counter()
     return sc_request(SC_REQUEST_ERROR_COUNTER, NULL, 0);
 }
 
+// FIXME: need to handle default pin (0xFF 0xFF 0xFF) presentation for blank cards!
 ULONG sc_request_present_pin()
 {
     BYTE data[3] = {0};
+    // FIXME: do not hardcode PIN here!!!
     // 3 pin bytes
     data[0] = 0xC0;
     data[1] = 0xDE;
@@ -220,11 +223,19 @@ ULONG sc_request_present_pin()
 ULONG sc_request_change_pin()
 {
     BYTE data[3] = {0};
+    // FIXME: do not hardcode PIN here!!!
     // 3 pin bytes
     data[0] = 0xC0;
     data[1] = 0xDE;
     data[2] = 0xA5;
     return sc_request(SC_REQUEST_CHANGE_PIN, data, 3);
+}
+
+ULONG sc_request_write_card()
+{
+    // FIXME: Where does data come from?
+    //        Just a stub for now..
+    return sc_request(SC_REQUEST_WRITE_CARD, NULL, 0);
 }
 
 
@@ -401,6 +412,27 @@ static void sc_handle_request_change_pin(const LPBYTE req_data, const ULONG req_
     }
 }
 
+// FIXME: untested!
+//        Just a stub for now..
+static void sc_handle_request_write_card(const LPBYTE req_data, const ULONG req_len)
+{
+    ERR("Not implemented!\n");
+    // BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
+    // ULONG recv_len = SC_BUFFER_MAXLEN - 2;
+    // BYTE sw_data[2] = {0};
+    // assert(l_handle != 0);
+    // LONG rv = sc_write_card(l_handle, req_data, recv_data, &recv_len, sw_data);
+    // if (rv != SCARD_S_SUCCESS) {
+    //     return;
+    // }
+    // // response is 0 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.5. WRITE_MEMORY_CARD
+    // assert(recv_len == 0);
+    // rv = sc_check_sw(sw_data, 0x90, 0x00);
+    // if (rv != SCARD_S_SUCCESS) {
+    //     return;
+    // }
+}
+
 
 static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE req_data, const ULONG req_len)
 {
@@ -428,6 +460,9 @@ static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE
     break;
     case SC_REQUEST_CHANGE_PIN:
         sc_handle_request_change_pin(req_data, req_len);
+    break;
+    case SC_REQUEST_WRITE_CARD:
+        sc_handle_request_write_card(req_data, req_len);
     break;
     default:
         return 0;
