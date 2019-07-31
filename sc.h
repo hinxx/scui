@@ -15,4 +15,9 @@ void sc_detect_thread_stop();
 bool sc_access_thread_start();
 void sc_access_thread_stop();
 
+// card requests (handled by the card access thread)
+LONG sc_request_connect();
+LONG sc_request_disconnect();
+bool sc_is_request_handled();
+
 #endif // SC_H_

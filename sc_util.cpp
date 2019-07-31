@@ -141,7 +141,7 @@ LPSTR sc_reader_name()
     return g_sc_reader_name;
 }
 
-bool sc_card_connect(const SCARDCONTEXT context, PSCARDHANDLE handle)
+LONG sc_card_connect(const SCARDCONTEXT context, PSCARDHANDLE handle)
 {
     DWORD dwActiveProtocol;
     LONG rv = SCardConnect(context, g_sc_reader_name, SCARD_SHARE_SHARED,
@@ -165,19 +165,19 @@ bool sc_card_connect(const SCARDCONTEXT context, PSCARDHANDLE handle)
         break;
     default:
         ERR("failed to get proper protocol\n");
-        return false;
+        return SCARD_E_PROTO_MISMATCH;
     }
 
     DBG("connected to card!\n");
-    return true;
+    return rv;
 }
 
-bool sc_card_disconnect(SCARDHANDLE handle)
+void sc_card_disconnect(PSCARDHANDLE handle)
 {
-    LONG rv = SCardDisconnect(handle, SCARD_UNPOWER_CARD);
+    LONG rv = SCardDisconnect(*handle, SCARD_UNPOWER_CARD);
     CHECK("SCardDisconnect", rv);
     // ignore return status
     g_sc_pci = 0;
-
-    return true;
+    *handle = 0;
+    DBG("disconnected from card!\n");
 }

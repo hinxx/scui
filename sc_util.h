@@ -65,8 +65,8 @@ LONG sc_wait_for_card_insert(const SCARDCONTEXT context);
 bool sc_is_reader_attached();
 bool sc_is_card_inserted();
 LPSTR sc_reader_name();
-bool sc_card_connect(const SCARDCONTEXT context);
-bool sc_card_disconnect();
+LONG sc_card_connect(const SCARDCONTEXT context, PSCARDHANDLE handle);
+void sc_card_disconnect(PSCARDHANDLE handle);
 bool sc_is_card_connected();
 
 #endif // SC_UTIL_H_

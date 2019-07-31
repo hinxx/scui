@@ -120,6 +120,11 @@ int main(int, char**)
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
+    bool have_reader = false;
+    bool have_card = false;
+    bool connected_card = false;
+    ULONG req_id = 0;
+
     // SCard initialize
     sc_init();
 
@@ -142,11 +147,27 @@ int main(int, char**)
         {
             ImGui::Begin("sole UI 0.0.1");                          // Create a window called "Hello, world!" and append into it.
 
-            bool have_reader = sc_is_reader_attached();
-            bool have_card = sc_is_card_inserted();
+            have_reader = sc_is_reader_attached();
+            have_card = sc_is_card_inserted();
 
             ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_reader_name());      // Edit bools storing our window open/close state
             ImGui::Text("Card inserted: %s", have_card ? "YES" : "NO");      // Edit bools storing our window open/close state
+
+            if (ImGui::Button("Connect Dummy")) {
+                req_id = sc_request_connect();
+            }
+
+            if (ImGui::Button("Disconnect Dummy")) {
+                req_id = sc_request_disconnect();
+            }
+            
+            connected_card = sc_is_card_connected();
+            ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");      // Edit bools storing our window open/close state
+
+            ImGui::Text("Req ID: %lu", req_id);      // Edit bools storing our window open/close state
+
+            // handled_req_id = sc_handled_request();
+            ImGui::Text("Handled Req ID %lu: %s", req_id, sc_is_request_handled() ? "YES" : "NO");      // Edit bools storing our window open/close state
 
             // bool card_connected = sc_is_card_connected();
             // if (have_card && !card_connected) {
