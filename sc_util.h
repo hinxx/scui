@@ -66,13 +66,13 @@ LONG sc_wait_for_card_remove(const SCARDCONTEXT context);
 LONG sc_wait_for_card_insert(const SCARDCONTEXT context);
 bool sc_is_reader_attached();
 bool sc_is_card_inserted();
-LPSTR sc_reader_name();
-LONG sc_card_connect(const SCARDCONTEXT context, PSCARDHANDLE handle);
-void sc_card_disconnect(PSCARDHANDLE handle);
+LPSTR sc_get_reader_name();
+LONG sc_connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle);
+void sc_disconnect_card(PSCARDHANDLE handle);
 bool sc_is_card_connected();
 LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG send_len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
 LONG sc_check_sw(const LPBYTE sw_data, const BYTE sw1, const BYTE sw2);
-LONG sc_reader_get_info(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+LONG sc_get_reader_info(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
 LONG sc_select_memory_card(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
 
 #endif // SC_UTIL_H_

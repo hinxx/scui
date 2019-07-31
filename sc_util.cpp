@@ -138,12 +138,12 @@ bool sc_is_card_inserted()
     return rv;
 }
 
-LPSTR sc_reader_name()
+LPSTR sc_get_reader_name()
 {
     return g_sc_reader_name;
 }
 
-LONG sc_card_connect(const SCARDCONTEXT context, PSCARDHANDLE handle)
+LONG sc_connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle)
 {
     DWORD dwActiveProtocol;
     LONG rv = SCardConnect(context, g_sc_reader_name, SCARD_SHARE_SHARED,
@@ -174,7 +174,7 @@ LONG sc_card_connect(const SCARDCONTEXT context, PSCARDHANDLE handle)
     return rv;
 }
 
-void sc_card_disconnect(PSCARDHANDLE handle)
+void sc_disconnect_card(PSCARDHANDLE handle)
 {
     LONG rv = SCardDisconnect(*handle, SCARD_UNPOWER_CARD);
     CHECK("SCardDisconnect", rv);
@@ -235,7 +235,7 @@ LONG sc_check_sw(const LPBYTE sw_data, const BYTE sw1, const BYTE sw2)
     return SCARD_F_UNKNOWN_ERROR;
 }
 
-LONG sc_reader_get_info(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+LONG sc_get_reader_info(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
 {
     // REF-ACR38x-CCID-6.05.pdf, 9.4.1. GET_READER_INFORMATION
     BYTE send_data[] = {0xFF, 0x09, 0x00, 0x00, 0x10};

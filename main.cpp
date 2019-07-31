@@ -150,7 +150,7 @@ int main(int, char**)
             have_reader = sc_is_reader_attached();
             have_card = sc_is_card_inserted();
 
-            ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_reader_name());      // Edit bools storing our window open/close state
+            ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_get_reader_name());      // Edit bools storing our window open/close state
             ImGui::Text("Card inserted: %s", have_card ? "YES" : "NO");      // Edit bools storing our window open/close state
 
             if (ImGui::Button("Card connect")) {

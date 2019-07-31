@@ -204,7 +204,7 @@ static void sc_handle_request_connect()
         return;
     }
 
-    LONG rv = sc_card_connect(l_context, &l_handle);
+    LONG rv = sc_connect_card(l_context, &l_handle);
     if (rv == SCARD_S_SUCCESS) {
         assert(l_handle != 0);
     }
@@ -213,7 +213,7 @@ static void sc_handle_request_connect()
 static void sc_handle_request_disconnect()
 {
     assert(l_handle != 0);
-    sc_card_disconnect(&l_handle);
+    sc_disconnect_card(&l_handle);
     assert(l_handle == 0);
 }
 
@@ -223,7 +223,7 @@ static void sc_handle_request_reader_info()
     ULONG recv_len = SC_BUFFER_MAXLEN - 2;
     BYTE sw_data[2] = {0};
     assert(l_handle != 0);
-    LONG rv = sc_reader_get_info(l_handle, recv_data, &recv_len, sw_data);
+    LONG rv = sc_get_reader_info(l_handle, recv_data, &recv_len, sw_data);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }

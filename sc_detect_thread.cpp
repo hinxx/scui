@@ -24,7 +24,7 @@ static void *sc_detect_thread_fnc(void *ptr)
         rv = sc_detect_reader(l_context);
         BOOL have_reader = sc_is_reader_attached();
         if (have_reader) {
-            DBG("READER %s\n", sc_reader_name());
+            DBG("READER %s\n", sc_get_reader_name());
             DBG("probing for card..\n");
             sc_probe_for_card(l_context);
             BOOL have_card = sc_is_card_inserted();
