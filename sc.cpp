@@ -1,12 +1,25 @@
 
 #include "sc.h"
 
-LONG sc_init()
+bool sc_init()
 {
-    return sc_thread_start();
+    TRC("Enter\n");
+
+    bool rv = sc_detect_thread_start();
+    assert(rv != false);
+    rv = sc_access_thread_start();
+    assert(rv != false);
+
+    TRC("Leave %d\n", rv);
+    return rv;
 }
 
-LONG sc_destroy()
+void sc_destroy()
 {
-    return sc_thread_stop();
+    TRC("Enter\n")
+    
+    sc_detect_thread_stop();
+    sc_access_thread_stop();
+
+    TRC("Leave\n");
 }

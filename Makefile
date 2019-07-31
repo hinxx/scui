@@ -45,7 +45,8 @@ CXXFLAGS += -I./gl3w
 ##---------------------------------------------------------------------
 ## SCUI SOURCES
 ##---------------------------------------------------------------------
-SOURCES += ./sc_thread.cpp
+SOURCES += ./sc_detect_thread.cpp
+SOURCES += ./sc_access_thread.cpp
 SOURCES += ./sc_util.cpp
 SOURCES += ./sc.cpp
 
