@@ -14,6 +14,7 @@ static pthread_cond_t l_condition = PTHREAD_COND_INITIALIZER;
 #define SC_REQUEST_DISCONNECT          2
 #define SC_REQUEST_READER_INFO         3
 #define SC_REQUEST_SELECT_CARD         4
+#define SC_REQUEST_READ_CARD           5
 
 static ULONG l_req_id = 0;
 static ULONG l_req_id_handled = 0;
@@ -188,6 +189,16 @@ ULONG sc_request_select_card()
     return sc_request(SC_REQUEST_SELECT_CARD, NULL, 0);
 }
 
+ULONG sc_request_read_card()
+{
+    BYTE data[2] = {0};
+    // read from user data start
+    data[0] = 64;
+    // read 16 bytes (4x 32-bit integers)
+    data[1] = 16;
+    return sc_request(SC_REQUEST_READ_CARD, data, 2);
+}
+
 
 // card request handlers
 
@@ -279,6 +290,34 @@ static void sc_handle_request_select_card()
     }
 }
 
+static void sc_handle_request_read_card(const LPBYTE req_data, const ULONG req_len)
+{
+    BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
+    ULONG recv_len = SC_BUFFER_MAXLEN - 2;
+    BYTE sw_data[2] = {0};
+    assert(l_handle != 0);
+    assert(req_len == 2);
+    LONG rv = sc_read_card(l_handle, req_data[0], req_data[1], recv_data, &recv_len, sw_data);
+    if (rv != SCARD_S_SUCCESS) {
+        return;
+    }
+    // response is req_data[1] bytes long
+    assert(recv_len == req_data[1]);
+    sc_to_hex(recv_data, recv_len);
+    ULONG magic = (recv_data[3] << 24  | recv_data[2] << 16  | recv_data[1] << 8  | recv_data[0]);
+    ULONG id    = (recv_data[7] << 24  | recv_data[6] << 16  | recv_data[5] << 8  | recv_data[4]);
+    ULONG total = (recv_data[11] << 24 | recv_data[10] << 16 | recv_data[9] << 8  | recv_data[8]);
+    ULONG value = (recv_data[15] << 24 | recv_data[14] << 16 | recv_data[13] << 8 | recv_data[12]);
+    DBG("MAGIC: %lu\n", magic);
+    DBG("CARD ID: %lu\n", id);
+    DBG("TOTAL: %lu\n", total);
+    DBG("VALUE: %lu\n", value);
+    rv = sc_check_sw(sw_data, 0x90, 0x00);
+    if (rv != SCARD_S_SUCCESS) {
+        return;
+    }
+}
+
 static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE req_data, const ULONG req_len)
 {
     switch(req) {
@@ -293,6 +332,9 @@ static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE
     break;
     case SC_REQUEST_SELECT_CARD:
         sc_handle_request_select_card();
+    break;
+    case SC_REQUEST_READ_CARD:
+        sc_handle_request_read_card(req_data, req_len);
     break;
     default:
         return 0;

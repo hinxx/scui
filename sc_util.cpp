@@ -184,7 +184,7 @@ void sc_disconnect_card(PSCARDHANDLE handle)
     DBG("disconnected from card!\n");
 }
 
-static void sc_buffer_to_hex(LPBYTE data, ULONG len)
+void sc_to_hex(LPBYTE data, ULONG len)
 {
     int off = 0;
     memset(l_hexbuf, 0, 3*SC_BUFFER_MAXLEN);
@@ -196,7 +196,7 @@ static void sc_buffer_to_hex(LPBYTE data, ULONG len)
 LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG send_len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
 {
     // dump request
-    sc_buffer_to_hex(send_data, send_len);
+    sc_to_hex(send_data, send_len);
     DBG("SEND: [%lu]: %s\n", send_len, l_hexbuf);
 
     BYTE tmp_buf[SC_BUFFER_MAXLEN];
@@ -209,7 +209,7 @@ LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG se
         return rv;
     }
     // dump response
-    sc_buffer_to_hex(tmp_buf, tmp_len);
+    sc_to_hex(tmp_buf, tmp_len);
     DBG("RECV: [%lu]: %s\n", tmp_len, l_hexbuf);
 
     // SW1 and SW2 are at the end of response
@@ -249,6 +249,15 @@ LONG sc_select_memory_card(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *re
     // REF-ACR38x-CCID-6.05.pdf, 9.3.6.1. SELECT_CARD_TYPE
     // working with memory cards of type SLE 4432, SLE 4442, SLE 5532, SLE 5542
     BYTE send_data[] = {0xFF, 0xA4, 0x00, 0x00, 0x01, 0x06};
+    ULONG send_len = sizeof(send_data);
+    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    return rv;
+}
+
+LONG sc_read_card(const SCARDHANDLE handle, BYTE address, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+{
+    // REF-ACR38x-CCID-6.05.pdf, 9.3.6.2.READ_MEMORY_CARD
+    BYTE send_data[] = {0xFF, 0xB0, 0x00, address, len};
     ULONG send_len = sizeof(send_data);
     LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
     return rv;

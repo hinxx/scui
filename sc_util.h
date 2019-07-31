@@ -70,9 +70,11 @@ LPSTR sc_get_reader_name();
 LONG sc_connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle);
 void sc_disconnect_card(PSCARDHANDLE handle);
 bool sc_is_card_connected();
+void sc_to_hex(LPBYTE data, ULONG len);
 LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG send_len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
 LONG sc_check_sw(const LPBYTE sw_data, const BYTE sw1, const BYTE sw2);
 LONG sc_get_reader_info(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
 LONG sc_select_memory_card(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+LONG sc_read_card(const SCARDHANDLE handle, BYTE address, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
 
 #endif // SC_UTIL_H_

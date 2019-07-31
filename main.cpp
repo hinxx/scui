@@ -169,21 +169,22 @@ int main(int, char**)
                 req_id = sc_request_select_card();
             }
 
-            connected_card = sc_is_card_connected();
-            ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");      // Edit bools storing our window open/close state
+            if (ImGui::Button("Read memory card")) {
+                req_id = sc_request_read_card();
+            }
 
-            ImGui::Text("Req ID: %lu", req_id);      // Edit bools storing our window open/close state
+            connected_card = sc_is_card_connected();
+            ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");
+
+            ImGui::Text("Req ID: %lu", req_id);
 
             // handled_req_id = sc_handled_request();
-            ImGui::Text("Handled Req ID %lu: %s", req_id, sc_is_request_handled() ? "YES" : "NO");      // Edit bools storing our window open/close state
+            ImGui::Text("Handled Req ID %lu: %s", req_id, sc_is_request_handled() ? "YES" : "NO");
 
-            // bool card_connected = sc_is_card_connected();
-            // if (have_card && !card_connected) {
-            //     sc_front_card_connect();
-            // }
-            // if (!have_card && card_connected) {
-            //     sc_front_card_disconnect();
-            // }
+            // if card or reader disappeared, and card was connected; disconnect card!
+            if (! (have_card && have_reader) && connected_card) {
+                req_id = sc_request_disconnect();
+            }
 
             ImGui::End();            
         }
