@@ -173,6 +173,10 @@ int main(int, char**)
                 req_id = sc_request_read_card();
             }
 
+            if (ImGui::Button("Read error counter")) {
+                req_id = sc_request_error_counter();
+            }
+
             connected_card = sc_is_card_connected();
             ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");
 
