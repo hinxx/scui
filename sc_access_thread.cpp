@@ -27,12 +27,12 @@ static void *sc_access_thread_fnc(void *ptr)
         TRC("waiting for condition ..\n");
         // Lock mutex and then wait for signal to relase mutex
         pthread_mutex_lock(&l_mutex);
-        // sleep(5);
         // mutex gets unlocked if condition variable is signaled
         pthread_cond_wait(&l_condition, &l_mutex);        
         pthread_mutex_unlock(&l_mutex);
         TRC("condition met!\n");
 
+        // XXX not calling any SCardGetStatusChange() in this thread
         // if the wait was cancelled (i.e. exiting the app), exit the thread!
         // if (rv == SCARD_E_CANCELLED) {
         //     TRC("stopping thread ..\n");
@@ -74,11 +74,14 @@ void sc_access_thread_stop()
 {
     TRC("Enter\n");
 
-    // cancel waiting SCardEstablishContext() inside the thread
-    if (l_context) {
-        LONG rv = SCardCancel(l_context);
-        CHECK("SCardCancel", rv);
-    }
+    // XXX not calling any SCardGetStatusChange() in this thread
+    // // cancel waiting SCardEstablishContext() inside the thread
+    // if (l_context) {
+    //     LONG rv = SCardCancel(l_context);
+    //     CHECK("SCardCancel", rv);
+    // }
+
+    // thread will exit after condition is set next
     l_run = false;
 
     pthread_mutex_lock(&l_mutex);
