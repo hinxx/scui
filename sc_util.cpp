@@ -272,3 +272,13 @@ LONG sc_get_error_counter(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *rec
     LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
     return rv;
 }
+
+LONG sc_present_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+{
+    // REF-ACR38x-CCID-6.05.pdf, 9.3.6.7. PRESENT_CODE_MEMORY_CARD
+    // for SLE 4442 and SLE 5542 memory cards
+    BYTE send_data[] = {0xFF, 0x20, 0x00, 0x00, 0x03, pin[0], pin[1], pin[2]};
+    ULONG send_len = sizeof(send_data);
+    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    return rv;
+}

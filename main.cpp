@@ -177,6 +177,10 @@ int main(int, char**)
                 req_id = sc_request_error_counter();
             }
 
+            if (ImGui::Button("Present PIN")) {
+                req_id = sc_request_present_pin();
+            }
+
             connected_card = sc_is_card_connected();
             ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");
 

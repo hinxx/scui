@@ -16,6 +16,7 @@ static pthread_cond_t l_condition = PTHREAD_COND_INITIALIZER;
 #define SC_REQUEST_SELECT_CARD         4
 #define SC_REQUEST_READ_CARD           5
 #define SC_REQUEST_ERROR_COUNTER       6
+#define SC_REQUEST_PRESENT_PIN         7
 
 static ULONG l_req_id = 0;
 static ULONG l_req_id_handled = 0;
@@ -205,6 +206,16 @@ ULONG sc_request_error_counter()
     return sc_request(SC_REQUEST_ERROR_COUNTER, NULL, 0);
 }
 
+ULONG sc_request_present_pin()
+{
+    BYTE data[3] = {0};
+    // 3 pin bytes
+    data[0] = 0xC0;
+    data[1] = 0xDE;
+    data[2] = 0xA5;
+    return sc_request(SC_REQUEST_PRESENT_PIN, data, 3);
+}
+
 
 // card request handlers
 
@@ -335,6 +346,32 @@ static void sc_handle_request_error_counter()
     }
 }
 
+static void sc_handle_request_present_pin(const LPBYTE req_data, const ULONG req_len)
+{
+    BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
+    ULONG recv_len = SC_BUFFER_MAXLEN - 2;
+    BYTE sw_data[2] = {0};
+    assert(l_handle != 0);
+    assert(req_len == 3);
+    LONG rv = sc_present_pin(l_handle, req_data, recv_data, &recv_len, sw_data);
+    if (rv != SCARD_S_SUCCESS) {
+        return;
+    }
+    // response is 0 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.7. PRESENT_CODE_MEMORY_CARD
+    assert(recv_len == 0);
+    sc_to_hex(sw_data, 2);
+    BYTE counter = sw_data[1];
+    // counter value: 0x07          indicates success,
+    //                0x03 and 0x01 indicate failed verification
+    //                0x00          indicates locked card (no retries left)
+    DBG("ERROR COUNTER: %u\n", counter);
+    rv = sc_check_sw(sw_data, 0x90, 0x07);
+    if (rv != SCARD_S_SUCCESS) {
+        return;
+    }
+}
+
+
 static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE req_data, const ULONG req_len)
 {
     switch(req) {
@@ -355,6 +392,9 @@ static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE
     break;
     case SC_REQUEST_ERROR_COUNTER:
         sc_handle_request_error_counter();
+    break;
+    case SC_REQUEST_PRESENT_PIN:
+        sc_handle_request_present_pin(req_data, req_len);
     break;
     default:
         return 0;
