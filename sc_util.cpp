@@ -13,6 +13,9 @@ const char *pcsc_stringify_error(const LONG rv)
 static char g_sc_reader_name[MAX_READERNAME] = {0};
 static LONG g_sc_reader_state = SCARD_STATE_UNAWARE;
 static pthread_mutex_t g_sc_reader_mutex = PTHREAD_MUTEX_INITIALIZER;
+// static BOOL g_sc_card_connected = 0;
+// static SCARDHANDLE g_sc_card_handle = 0;
+static PSCARD_IO_REQUEST g_sc_pci= 0;
 
 LONG sc_create_context(PSCARDCONTEXT context)
 {
@@ -117,18 +120,18 @@ LONG sc_wait_for_card_insert(const SCARDCONTEXT context)
     return sc_wait_for_card(context, INFINITE);
 }
 
-BOOL sc_is_reader_attached()
+bool sc_is_reader_attached()
 {
     pthread_mutex_lock(&g_sc_reader_mutex);
-    BOOL rv = (g_sc_reader_name[0] != 0) ? 1 : 0;
+    bool rv = (g_sc_reader_name[0] != 0) ? true : false;
     pthread_mutex_unlock(&g_sc_reader_mutex);
     return rv;
 }
 
-BOOL sc_is_card_inserted()
+bool sc_is_card_inserted()
 {
     pthread_mutex_lock(&g_sc_reader_mutex);
-    LONG rv = (g_sc_reader_state & SCARD_STATE_PRESENT) ? 1 : 0;
+    bool rv = (g_sc_reader_state & SCARD_STATE_PRESENT) ? true : false;
     pthread_mutex_unlock(&g_sc_reader_mutex);
     return rv;
 }
@@ -136,4 +139,45 @@ BOOL sc_is_card_inserted()
 LPSTR sc_reader_name()
 {
     return g_sc_reader_name;
+}
+
+bool sc_card_connect(const SCARDCONTEXT context, PSCARDHANDLE handle)
+{
+    DWORD dwActiveProtocol;
+    LONG rv = SCardConnect(context, g_sc_reader_name, SCARD_SHARE_SHARED,
+        SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1, handle, &dwActiveProtocol);
+    // CHECK("SCardConnect", rv);
+    // if (rv != SCARD_S_SUCCESS) {
+    //     qCritical() << "failed to connect to card!";
+    //     return false;
+    // }
+    RETURN("SCardConnect", rv);
+
+    switch(dwActiveProtocol) {
+    case SCARD_PROTOCOL_T0:
+        g_sc_pci = (SCARD_IO_REQUEST *)SCARD_PCI_T0;
+        DBG("using T0 protocol\n");
+        break;
+
+    case SCARD_PROTOCOL_T1:
+        g_sc_pci = (SCARD_IO_REQUEST *)SCARD_PCI_T1;
+        DBG("using T1 protocol\n");
+        break;
+    default:
+        ERR("failed to get proper protocol\n");
+        return false;
+    }
+
+    DBG("connected to card!\n");
+    return true;
+}
+
+bool sc_card_disconnect(SCARDHANDLE handle)
+{
+    LONG rv = SCardDisconnect(handle, SCARD_UNPOWER_CARD);
+    CHECK("SCardDisconnect", rv);
+    // ignore return status
+    g_sc_pci = 0;
+
+    return true;
 }

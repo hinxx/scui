@@ -142,8 +142,19 @@ int main(int, char**)
         {
             ImGui::Begin("sole UI 0.0.1");                          // Create a window called "Hello, world!" and append into it.
 
-            ImGui::Text("Reader attached: %s (%s)", sc_is_reader_attached() ? "YES" : "NO", sc_reader_name());      // Edit bools storing our window open/close state
-            ImGui::Text("Card inserted: %s", sc_is_card_inserted() ? "YES" : "NO");      // Edit bools storing our window open/close state
+            bool have_reader = sc_is_reader_attached();
+            bool have_card = sc_is_card_inserted();
+
+            ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_reader_name());      // Edit bools storing our window open/close state
+            ImGui::Text("Card inserted: %s", have_card ? "YES" : "NO");      // Edit bools storing our window open/close state
+
+            // bool card_connected = sc_is_card_connected();
+            // if (have_card && !card_connected) {
+            //     sc_front_card_connect();
+            // }
+            // if (!have_card && card_connected) {
+            //     sc_front_card_disconnect();
+            // }
 
             ImGui::End();            
         }

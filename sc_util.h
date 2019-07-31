@@ -61,8 +61,11 @@ LONG sc_wait_for_card(const SCARDCONTEXT context, const ULONG timeout);
 LONG sc_probe_for_card(const SCARDCONTEXT context);
 LONG sc_wait_for_card_remove(const SCARDCONTEXT context);
 LONG sc_wait_for_card_insert(const SCARDCONTEXT context);
-BOOL sc_is_reader_attached();
-BOOL sc_is_card_inserted();
+bool sc_is_reader_attached();
+bool sc_is_card_inserted();
 LPSTR sc_reader_name();
+bool sc_card_connect(const SCARDCONTEXT context);
+bool sc_card_disconnect();
+bool sc_is_card_connected();
 
 #endif // SC_UTIL_H_
