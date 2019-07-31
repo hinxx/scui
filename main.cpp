@@ -165,6 +165,10 @@ int main(int, char**)
                 req_id = sc_request_reader_info();
             }
 
+            if (ImGui::Button("Select memory card")) {
+                req_id = sc_request_select_card();
+            }
+
             connected_card = sc_is_card_connected();
             ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");      // Edit bools storing our window open/close state
 

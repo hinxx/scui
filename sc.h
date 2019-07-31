@@ -20,5 +20,6 @@ bool sc_is_request_handled();
 LONG sc_request_connect();
 LONG sc_request_disconnect();
 LONG sc_request_reader_info();
+LONG sc_request_select_card();
 
 #endif // SC_H_

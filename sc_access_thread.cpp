@@ -13,6 +13,7 @@ static pthread_cond_t l_condition = PTHREAD_COND_INITIALIZER;
 #define SC_REQUEST_CONNECT             1
 #define SC_REQUEST_DISCONNECT          2
 #define SC_REQUEST_READER_INFO         3
+#define SC_REQUEST_SELECT_CARD         4
 
 static ULONG l_req_id = 0;
 static ULONG l_req_id_handled = 0;
@@ -182,6 +183,11 @@ ULONG sc_request_reader_info()
     return sc_request(SC_REQUEST_READER_INFO, NULL, 0);
 }
 
+ULONG sc_request_select_card()
+{
+    return sc_request(SC_REQUEST_SELECT_CARD, NULL, 0);
+}
+
 
 // card request handlers
 
@@ -242,6 +248,37 @@ static void sc_handle_request_reader_info()
     }
 }
 
+static void sc_handle_request_select_card()
+{
+    BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
+    ULONG recv_len = SC_BUFFER_MAXLEN - 2;
+    BYTE sw_data[2] = {0};
+    assert(l_handle != 0);
+    LONG rv = sc_select_memory_card(l_handle, recv_data, &recv_len, sw_data);
+    if (rv != SCARD_S_SUCCESS) {
+        return;
+    }
+    // response is 0 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.1. SELECT_CARD_TYPE
+    assert(recv_len == 0);
+    // BYTE firmware[11] = {0};
+    // memcpy(firmware, recv_data, 10);
+    // DBG("firmware: %s\n", firmware);
+    // BYTE send_max = recv_data[10];
+    // DBG("send max %d bytes\n", send_max);
+    // BYTE recv_max = recv_data[11];
+    // DBG("recv max %d bytes\n", recv_max);
+    // USHORT card_types = (recv_data[12] << 8) | recv_data[13];
+    // DBG("card types 0x%04X\n", card_types);
+    // BYTE card_sel = recv_data[14];
+    // DBG("selected card 0x%02X\n", card_sel);
+    // BYTE card_stat = recv_data[15];
+    // DBG("card status %d\n", card_stat);
+    rv = sc_check_sw(sw_data, 0x90, 0x00);
+    if (rv != SCARD_S_SUCCESS) {
+        return;
+    }
+}
+
 static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE req_data, const ULONG req_len)
 {
     switch(req) {
@@ -253,6 +290,9 @@ static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE
     break;
     case SC_REQUEST_READER_INFO:
         sc_handle_request_reader_info();
+    break;
+    case SC_REQUEST_SELECT_CARD:
+        sc_handle_request_select_card();
     break;
     default:
         return 0;
