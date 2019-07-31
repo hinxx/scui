@@ -15,6 +15,7 @@ static void *sc_detect_thread_fnc(void *ptr)
 
     LONG rv = sc_create_context(&l_context);
     DBG("create CONTEXT 0x%08lX\n", l_context);
+    assert(rv == SCARD_S_SUCCESS);
 
     while (1) {
         TRC("loop, waiting for reader to arrive or leave ..\n");
