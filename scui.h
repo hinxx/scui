@@ -32,5 +32,7 @@ bool sc_is_reader_attached();
 bool sc_is_card_inserted();
 char *sc_get_reader_name();
 bool sc_is_card_connected();
+bool sc_identify_card();
+void sc_forget_card();
 
 #endif // SC_H_

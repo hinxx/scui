@@ -123,6 +123,8 @@ int main(int, char**)
     bool have_reader = false;
     bool have_card = false;
     bool connected_card = false;
+    bool identify_card = false;
+
     // ULONG req_id = 0;
     // SCard initialize
     sc_init();
@@ -146,11 +148,24 @@ int main(int, char**)
         {
             ImGui::Begin("Sole Card UI 0.0.1");
 
+            // if (! have_reader && sc_is_reader_attached()) {
+            //     identify_card = true;
+            // }
             have_reader = sc_is_reader_attached();
+            if (! have_card && sc_is_card_inserted()) {
+                identify_card = true;
+            }
             have_card = sc_is_card_inserted();
 
             ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_get_reader_name());
             ImGui::Text("Card inserted: %s", have_card ? "YES" : "NO");
+            ImGui::Text("Identify card: %s", identify_card ? "YES" : "NO");
+
+            if (identify_card) {
+                sc_identify_card();
+                identify_card = false;
+            }
+
 /*
             if (ImGui::Button("Card connect")) {
                 req_id = sc_request_connect();
@@ -199,6 +214,7 @@ int main(int, char**)
             // if card or reader disappeared, and card was connected; disconnect card!
             if (! (have_card && have_reader) && connected_card) {
                 // req_id = sc_request_disconnect();
+                sc_forget_card();
             }
 
             ImGui::End();            

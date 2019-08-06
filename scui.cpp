@@ -431,6 +431,7 @@ static pthread_t worker_thread_id = 0;
 static bool worker_thread_run = true;
 static pthread_mutex_t worker_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t worker_condition = PTHREAD_COND_INITIALIZER;
+static SCARDHANDLE worker_card = 0;
 
 #define SC_REQUEST_MAXLEN              128
 
@@ -450,7 +451,6 @@ static ULONG l_req_id_handled = 0;
 static ULONG l_req = SC_REQUEST_NONE;
 static ULONG l_req_len = 0;
 static BYTE l_req_data[SC_REQUEST_MAXLEN] = {0};
-static SCARDHANDLE l_handle = 0;
 
 // decalarations
 static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE req_data, const ULONG req_len);
@@ -658,28 +658,28 @@ bool sc_request_write_card()
 
 bool sc_is_card_connected()
 {
-    return (l_handle != 0) ? true : false;
+    return (worker_card != 0) ? true : false;
 }
 
 static void sc_handle_request_connect()
 {
     // only connect to card if not already connected
-    if (l_handle) {
+    if (worker_card) {
         ERR("already connected to card\n");
         return;
     }
 
-    LONG rv = connect_card(worker_context, &l_handle);
+    LONG rv = connect_card(worker_context, &worker_card);
     if (rv == SCARD_S_SUCCESS) {
-        assert(l_handle != 0);
+        assert(worker_card != 0);
     }
 }
 
 static void sc_handle_request_disconnect()
 {
-    assert(l_handle != 0);
-    disconnect_card(&l_handle);
-    assert(l_handle == 0);
+    assert(worker_card != 0);
+    disconnect_card(&worker_card);
+    assert(worker_card == 0);
 }
 
 static void sc_handle_request_reader_info()
@@ -687,8 +687,8 @@ static void sc_handle_request_reader_info()
     BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
     ULONG recv_len = SC_BUFFER_MAXLEN - 2;
     BYTE sw_data[2] = {0};
-    assert(l_handle != 0);
-    LONG rv = sc_get_reader_info(l_handle, recv_data, &recv_len, sw_data);
+    assert(worker_card != 0);
+    LONG rv = sc_get_reader_info(worker_card, recv_data, &recv_len, sw_data);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -718,8 +718,8 @@ static void sc_handle_request_select_card()
     BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
     ULONG recv_len = SC_BUFFER_MAXLEN - 2;
     BYTE sw_data[2] = {0};
-    assert(l_handle != 0);
-    LONG rv = sc_select_memory_card(l_handle, recv_data, &recv_len, sw_data);
+    assert(worker_card != 0);
+    LONG rv = sc_select_memory_card(worker_card, recv_data, &recv_len, sw_data);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -736,9 +736,9 @@ static void sc_handle_request_read_card(const LPBYTE req_data, const ULONG req_l
     BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
     ULONG recv_len = SC_BUFFER_MAXLEN - 2;
     BYTE sw_data[2] = {0};
-    assert(l_handle != 0);
+    assert(worker_card != 0);
     assert(req_len == 2);
-    LONG rv = sc_read_card(l_handle, req_data[0], req_data[1], recv_data, &recv_len, sw_data);
+    LONG rv = sc_read_card(worker_card, req_data[0], req_data[1], recv_data, &recv_len, sw_data);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -764,8 +764,8 @@ static void sc_handle_request_error_counter()
     BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
     ULONG recv_len = SC_BUFFER_MAXLEN - 2;
     BYTE sw_data[2] = {0};
-    assert(l_handle != 0);
-    LONG rv = sc_get_error_counter(l_handle, recv_data, &recv_len, sw_data);
+    assert(worker_card != 0);
+    LONG rv = sc_get_error_counter(worker_card, recv_data, &recv_len, sw_data);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -788,9 +788,9 @@ static void sc_handle_request_present_pin(const LPBYTE req_data, const ULONG req
     BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
     ULONG recv_len = SC_BUFFER_MAXLEN - 2;
     BYTE sw_data[2] = {0};
-    assert(l_handle != 0);
+    assert(worker_card != 0);
     assert(req_len == 3);
-    LONG rv = sc_present_pin(l_handle, req_data, recv_data, &recv_len, sw_data);
+    LONG rv = sc_present_pin(worker_card, req_data, recv_data, &recv_len, sw_data);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -813,9 +813,9 @@ static void sc_handle_request_change_pin(const LPBYTE req_data, const ULONG req_
     BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
     ULONG recv_len = SC_BUFFER_MAXLEN - 2;
     BYTE sw_data[2] = {0};
-    assert(l_handle != 0);
+    assert(worker_card != 0);
     assert(req_len == 3);
-    LONG rv = sc_change_pin(l_handle, req_data, recv_data, &recv_len, sw_data);
+    LONG rv = sc_change_pin(worker_card, req_data, recv_data, &recv_len, sw_data);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -835,8 +835,8 @@ static void sc_handle_request_write_card(const LPBYTE req_data, const ULONG req_
     // BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
     // ULONG recv_len = SC_BUFFER_MAXLEN - 2;
     // BYTE sw_data[2] = {0};
-    // assert(l_handle != 0);
-    // LONG rv = sc_write_card(l_handle, req_data, recv_data, &recv_len, sw_data);
+    // assert(worker_card != 0);
+    // LONG rv = sc_write_card(worker_card, req_data, recv_data, &recv_len, sw_data);
     // if (rv != SCARD_S_SUCCESS) {
     //     return;
     // }
@@ -937,4 +937,23 @@ bool sc_is_card_inserted()
 char *sc_get_reader_name()
 {
     return reader_name();
+}
+
+bool sc_identify_card()
+{
+    TRC("Enter\n")
+
+    bool rv = false;
+    rv = connect_card(worker_context, &worker_card);
+    if (! rv) {
+        return false;
+    }
+
+    return true;
+}
+
+void sc_forget_card()
+{
+    TRC("Enter\n")
+    disconnect_card(&worker_card);
 }
