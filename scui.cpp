@@ -46,7 +46,7 @@ static void to_hex(LPBYTE data, ULONG len)
  * low level smart card access
  */
 
-static bool sc_create_context(PSCARDCONTEXT context)
+static bool create_context(PSCARDCONTEXT context)
 {
     // establish PC/SC Connection
     LONG rv = SCardEstablishContext(SCARD_SCOPE_SYSTEM, NULL, NULL, context);
@@ -63,7 +63,7 @@ static bool sc_create_context(PSCARDCONTEXT context)
     return true;
 }
 
-static void sc_destroy_context(PSCARDCONTEXT context)
+static void destroy_context(PSCARDCONTEXT context)
 {
     if (*context) {
         LONG rv = SCardReleaseContext(*context);
@@ -72,7 +72,7 @@ static void sc_destroy_context(PSCARDCONTEXT context)
     }
 }
 
-LONG sc_detect_reader(const SCARDCONTEXT context)
+static void detect_reader(const SCARDCONTEXT context)
 {
     DWORD dwReaders = MAX_READERNAME;
     BYTE mszReaders[MAX_READERNAME] = {0};
@@ -84,10 +84,9 @@ LONG sc_detect_reader(const SCARDCONTEXT context)
     pthread_mutex_lock(&g_sc_reader_mutex);
     strncpy(g_sc_reader_name, (LPCSTR)mszReaders, MAX_READERNAME);
     pthread_mutex_unlock(&g_sc_reader_mutex);
-    return rv;
 }
 
-LONG sc_wait_for_reader(const SCARDCONTEXT context, const ULONG timeout)
+static void wait_for_reader(const SCARDCONTEXT context, const ULONG timeout)
 {
     SCARD_READERSTATE rgReaderStates[1];
 
@@ -100,13 +99,11 @@ LONG sc_wait_for_reader(const SCARDCONTEXT context, const ULONG timeout)
 
     LONG rv = SCardGetStatusChange(context, timeout, rgReaderStates, 1);
     CHECK("SCardGetStatusChange", rv);
-
     DBG("leave SCardGetStatusChange: rv=0x%08lX dwEventState=0x%08lX dwCurrentState=0x%08lX\n",
         rv, rgReaderStates[0].dwEventState, rgReaderStates[0].dwCurrentState);
-    return rv;
 }
 
-LONG sc_wait_for_card(const SCARDCONTEXT context, const ULONG timeout)
+static void wait_for_card(const SCARDCONTEXT context, const ULONG timeout)
 {
     pthread_mutex_lock(&g_sc_reader_mutex);
     char reader_name[MAX_READERNAME] = {0};
@@ -129,25 +126,24 @@ LONG sc_wait_for_card(const SCARDCONTEXT context, const ULONG timeout)
         pthread_mutex_unlock(&g_sc_reader_mutex);
     }
     DBG("leave SCardGetStatusChange: reader_state=0x%08lX\n", g_sc_reader_state);
-    return rv;
 }
 
-LONG sc_probe_for_card(const SCARDCONTEXT context)
+static void probe_for_card(const SCARDCONTEXT context)
 {
-    return sc_wait_for_card(context, 1);
+    wait_for_card(context, 1);
 }
 
-LONG sc_wait_for_card_remove(const SCARDCONTEXT context)
+static void wait_for_card_remove(const SCARDCONTEXT context)
 {
-    return sc_wait_for_card(context, INFINITE);
+    wait_for_card(context, INFINITE);
 }
 
-LONG sc_wait_for_card_insert(const SCARDCONTEXT context)
+static void wait_for_card_insert(const SCARDCONTEXT context)
 {
-    return sc_wait_for_card(context, INFINITE);
+    wait_for_card(context, INFINITE);
 }
 
-bool sc_is_reader_attached()
+static bool reader_presence()
 {
     pthread_mutex_lock(&g_sc_reader_mutex);
     bool rv = (g_sc_reader_name[0] != 0) ? true : false;
@@ -155,7 +151,7 @@ bool sc_is_reader_attached()
     return rv;
 }
 
-bool sc_is_card_inserted()
+static bool card_presence()
 {
     pthread_mutex_lock(&g_sc_reader_mutex);
     bool rv = (g_sc_reader_state & SCARD_STATE_PRESENT) ? true : false;
@@ -163,22 +159,24 @@ bool sc_is_card_inserted()
     return rv;
 }
 
-LPSTR sc_get_reader_name()
+static char *reader_name()
 {
     return g_sc_reader_name;
 }
 
-LONG sc_connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle)
+static bool connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle)
 {
     DWORD dwActiveProtocol;
-    LONG rv = SCardConnect(context, g_sc_reader_name, SCARD_SHARE_SHARED,
+    pthread_mutex_lock(&g_sc_reader_mutex);
+    char reader_name[MAX_READERNAME] = {0};
+    strncpy(reader_name, g_sc_reader_name, MAX_READERNAME);
+    pthread_mutex_unlock(&g_sc_reader_mutex);
+    LONG rv = SCardConnect(context, reader_name, SCARD_SHARE_SHARED,
         SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1, handle, &dwActiveProtocol);
-    // CHECK("SCardConnect", rv);
-    // if (rv != SCARD_S_SUCCESS) {
-    //     qCritical() << "failed to connect to card!";
-    //     return false;
-    // }
-    RETURN("SCardConnect", rv);
+    CHECK("SCardConnect", rv);
+    if (rv != SCARD_S_SUCCESS) {
+        return false;
+    }
 
     switch(dwActiveProtocol) {
     case SCARD_PROTOCOL_T0:
@@ -192,14 +190,14 @@ LONG sc_connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle)
         break;
     default:
         ERR("failed to get proper protocol\n");
-        return SCARD_E_PROTO_MISMATCH;
+        return false;
     }
 
     DBG("connected to card!\n");
-    return rv;
+    return true;
 }
 
-void sc_disconnect_card(PSCARDHANDLE handle)
+void disconnect_card(PSCARDHANDLE handle)
 {
     LONG rv = SCardDisconnect(*handle, SCARD_UNPOWER_CARD);
     CHECK("SCardDisconnect", rv);
@@ -343,7 +341,7 @@ static bool detect_thread_run = true;
  */
 static void *detect_thread_fnc(void *ptr)
 {
-    bool rv = sc_create_context(&detect_context);
+    bool rv = create_context(&detect_context);
     DBG("created CONTEXT 0x%08lX\n", detect_context);
     assert(rv != false);
 
@@ -351,26 +349,26 @@ static void *detect_thread_fnc(void *ptr)
         TRC("loop, waiting for reader to arrive or leave ..\n");
         (void)fflush(stdout);
 
-        rv = sc_detect_reader(detect_context);
-        BOOL have_reader = sc_is_reader_attached();
+        detect_reader(detect_context);
+        BOOL have_reader = reader_presence();
         if (have_reader) {
-            DBG("READER %s\n", sc_get_reader_name());
+            DBG("READER %s\n", reader_name());
             DBG("probing for card..\n");
-            sc_probe_for_card(detect_context);
-            BOOL have_card = sc_is_card_inserted();
+            probe_for_card(detect_context);
+            BOOL have_card = card_presence();
             if (have_card) {
                 DBG("CARD PRESENT..\n");
                 DBG("waiting for card remove..\n");
-                rv = sc_wait_for_card_remove(detect_context);
+                wait_for_card_remove(detect_context);
             } else {
                 DBG("NO CARD!\n");
                 DBG("waiting for card insert..\n");
-                rv = sc_wait_for_card_insert(detect_context);
+                wait_for_card_insert(detect_context);
             }
         } else {
             DBG("NO READER\n");
             DBG("waiting for reader..\n");
-            rv = sc_wait_for_reader(detect_context, INFINITE);
+            wait_for_reader(detect_context, INFINITE);
         }
 
         // exit the thread!
@@ -381,7 +379,7 @@ static void *detect_thread_fnc(void *ptr)
     }
 
     DBG("destroying CONTEXT 0x%08lX\n", detect_context);
-    sc_destroy_context(&detect_context);
+    destroy_context(&detect_context);
 
     return 0;
 }
@@ -470,7 +468,7 @@ static void *worker_thread_fnc(void *ptr)
     ULONG req_len;
     BYTE req_data[SC_REQUEST_MAXLEN];
 
-    bool rv = sc_create_context(&worker_context);
+    bool rv = create_context(&worker_context);
     DBG("created CONTEXT 0x%08lX\n", worker_context);
     assert(rv != false);
 
@@ -515,7 +513,7 @@ static void *worker_thread_fnc(void *ptr)
     }
 
     DBG("destroying CONTEXT 0x%08lX\n", worker_context);
-    sc_destroy_context(&worker_context);
+    destroy_context(&worker_context);
 
     return 0;
 }
@@ -671,7 +669,7 @@ static void sc_handle_request_connect()
         return;
     }
 
-    LONG rv = sc_connect_card(worker_context, &l_handle);
+    LONG rv = connect_card(worker_context, &l_handle);
     if (rv == SCARD_S_SUCCESS) {
         assert(l_handle != 0);
     }
@@ -680,7 +678,7 @@ static void sc_handle_request_connect()
 static void sc_handle_request_disconnect()
 {
     assert(l_handle != 0);
-    sc_disconnect_card(&l_handle);
+    disconnect_card(&l_handle);
     assert(l_handle == 0);
 }
 
@@ -924,4 +922,19 @@ void sc_destroy()
     worker_thread_stop();
 
     TRC("Leave\n");
+}
+
+bool sc_is_reader_attached()
+{
+    return reader_presence();
+}
+
+bool sc_is_card_inserted()
+{
+    return card_presence();
+}
+
+char *sc_get_reader_name()
+{
+    return reader_name();
 }

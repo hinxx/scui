@@ -86,7 +86,7 @@ struct state {
     bool card_unlocked;
     bool card_identified;
     uint8_t card_error_counter;
-    void* card_protocol;
+    PSCARD_IO_REQUEST card_protocol;
 
     // user
     uint32_t user_magic;
@@ -97,19 +97,19 @@ struct state {
 
 // LONG sc_create_context(PSCARDCONTEXT context);
 // LONG sc_destroy_context(PSCARDCONTEXT context);
-LONG sc_detect_reader(const SCARDCONTEXT context);
-LONG sc_wait_for_reader(const SCARDCONTEXT context, const ULONG timeout);
-LONG sc_wait_for_card(const SCARDCONTEXT context, const ULONG timeout);
-LONG sc_probe_for_card(const SCARDCONTEXT context);
-LONG sc_wait_for_card_remove(const SCARDCONTEXT context);
-LONG sc_wait_for_card_insert(const SCARDCONTEXT context);
+// LONG sc_detect_reader(const SCARDCONTEXT context);
+// LONG sc_wait_for_reader(const SCARDCONTEXT context, const ULONG timeout);
+// LONG sc_wait_for_card(const SCARDCONTEXT context, const ULONG timeout);
+// LONG sc_probe_for_card(const SCARDCONTEXT context);
+// LONG sc_wait_for_card_remove(const SCARDCONTEXT context);
+// LONG sc_wait_for_card_insert(const SCARDCONTEXT context);
 // bool sc_is_reader_attached();
 // bool sc_is_card_inserted();
 // LPSTR sc_get_reader_name();
-LONG sc_connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle);
-void sc_disconnect_card(PSCARDHANDLE handle);
+// LONG sc_connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle);
+// void sc_disconnect_card(PSCARDHANDLE handle);
 // bool sc_is_card_connected();
-void sc_to_hex(LPBYTE data, ULONG len);
+// void sc_to_hex(LPBYTE data, ULONG len);
 LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG send_len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
 LONG sc_check_sw(const LPBYTE sw_data, const BYTE sw1, const BYTE sw2);
 LONG sc_get_reader_info(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
