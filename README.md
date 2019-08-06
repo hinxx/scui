@@ -1,2 +1,3 @@
-# scui
-smartcard ui based on imgui
+# scui - Sole Card UI
+  
+  * based on imgui
