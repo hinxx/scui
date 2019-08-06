@@ -31,7 +31,7 @@
 #endif
 
 // SCard API
-#include "sc.h"
+#include "scui.h"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -123,8 +123,7 @@ int main(int, char**)
     bool have_reader = false;
     bool have_card = false;
     bool connected_card = false;
-    ULONG req_id = 0;
-
+    // ULONG req_id = 0;
     // SCard initialize
     sc_init();
 
@@ -145,14 +144,14 @@ int main(int, char**)
 
         // SCard window
         {
-            ImGui::Begin("sole UI 0.0.1");                          // Create a window called "Hello, world!" and append into it.
+            ImGui::Begin("Sole Card UI 0.0.1");
 
             have_reader = sc_is_reader_attached();
             have_card = sc_is_card_inserted();
 
-            ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_get_reader_name());      // Edit bools storing our window open/close state
-            ImGui::Text("Card inserted: %s", have_card ? "YES" : "NO");      // Edit bools storing our window open/close state
-
+            ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_get_reader_name());
+            ImGui::Text("Card inserted: %s", have_card ? "YES" : "NO");
+/*
             if (ImGui::Button("Card connect")) {
                 req_id = sc_request_connect();
             }
@@ -188,18 +187,18 @@ int main(int, char**)
             if (ImGui::Button("Write memory card")) {
                 req_id = sc_request_write_card();
             }
-
+*/
             connected_card = sc_is_card_connected();
             ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");
 
-            ImGui::Text("Req ID: %lu", req_id);
+            // ImGui::Text("Req ID: %lu", req_id);
 
             // handled_req_id = sc_handled_request();
-            ImGui::Text("Handled Req ID %lu: %s", req_id, sc_is_request_handled() ? "YES" : "NO");
+            // ImGui::Text("Handled Req ID %lu: %s", req_id, sc_is_request_handled() ? "YES" : "NO");
 
             // if card or reader disappeared, and card was connected; disconnect card!
             if (! (have_card && have_reader) && connected_card) {
-                req_id = sc_request_disconnect();
+                // req_id = sc_request_disconnect();
             }
 
             ImGui::End();            
