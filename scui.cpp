@@ -46,32 +46,30 @@ static void to_hex(LPBYTE data, ULONG len)
  * low level smart card access
  */
 
-LONG sc_create_context(PSCARDCONTEXT context)
+static bool sc_create_context(PSCARDCONTEXT context)
 {
-    TRC("Enter\n");
     // establish PC/SC Connection
     LONG rv = SCardEstablishContext(SCARD_SCOPE_SYSTEM, NULL, NULL, context);
-    RETURN("SCardEstablishContext", rv);
+    CHECK("SCardEstablishContext", rv);
+    if (rv != SCARD_S_SUCCESS) {
+        return false;
+    }
     rv = SCardIsValidContext(*context);
-    RETURN("SCardIsValidContext", rv);
+    CHECK("SCardIsValidContext", rv);
+    if (rv != SCARD_S_SUCCESS) {
+        return false;
+    }
 
-    TRC("Leave 0x%08lX\n", rv);
-    return rv;
+    return true;
 }
 
-LONG sc_destroy_context(PSCARDCONTEXT context)
+static void sc_destroy_context(PSCARDCONTEXT context)
 {
-    LONG rv = SCARD_S_SUCCESS;
-
-    TRC("Enter\n");
     if (*context) {
-        rv = SCardReleaseContext(*context);
+        LONG rv = SCardReleaseContext(*context);
         CHECK("SCardReleaseContext", rv);
         *context = 0;
     }
-
-    TRC("Leave 0x%08lX\n", rv);
-    return rv;
 }
 
 LONG sc_detect_reader(const SCARDCONTEXT context)
@@ -336,19 +334,18 @@ LONG sc_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len
 
 static SCARDCONTEXT detect_context = 0;
 static pthread_t detect_thread_id = 0;
+static bool detect_thread_run = true;
 
 /**
  * Thread routine which waits for change in reader and card state. 
  * @param  ptr NULL
  * @return     0
  */
-static void *sc_detect_thread_fnc(void *ptr)
+static void *detect_thread_fnc(void *ptr)
 {
-    TRC("Enter\n");
-
-    LONG rv = sc_create_context(&detect_context);
-    DBG("create CONTEXT 0x%08lX\n", detect_context);
-    assert(rv == SCARD_S_SUCCESS);
+    bool rv = sc_create_context(&detect_context);
+    DBG("created CONTEXT 0x%08lX\n", detect_context);
+    assert(rv != false);
 
     while (1) {
         TRC("loop, waiting for reader to arrive or leave ..\n");
@@ -376,17 +373,16 @@ static void *sc_detect_thread_fnc(void *ptr)
             rv = sc_wait_for_reader(detect_context, INFINITE);
         }
 
-        // if the wait was cancelled (i.e. exiting the app), exit the thread!
-        if (rv == SCARD_E_CANCELLED) {
+        // exit the thread!
+        if (! detect_thread_run) {
             TRC("stopping thread ..\n");
             break;
         }
     }
 
-    DBG("destroy CONTEXT 0x%08lX\n", detect_context);
+    DBG("destroying CONTEXT 0x%08lX\n", detect_context);
     sc_destroy_context(&detect_context);
 
-    TRC("Leave\n");
     return 0;
 }
 
@@ -394,18 +390,15 @@ static void *sc_detect_thread_fnc(void *ptr)
  * Start the reader and card state change thread.
  * @return true - success, false - failure
  */
-bool sc_detect_thread_start()
+static bool detect_thread_start()
 {
-    TRC("Enter\n");
-
-    int rv = pthread_create(&detect_thread_id, NULL, sc_detect_thread_fnc, NULL);
+    int rv = pthread_create(&detect_thread_id, NULL, detect_thread_fnc, NULL);
     if (rv) {
         ERR("Error - pthread_create() return code: %d\n", rv);
-        TRC("Leave false\n");
         return false;
     }
 
-    TRC("Leave true\n");
+    DBG("Created detect thread\n");
     return true;
 }
 
@@ -413,18 +406,18 @@ bool sc_detect_thread_start()
  * Stop the reader and card state change thread.
  * @return none
  */
-void sc_detect_thread_stop()
+static void detect_thread_stop()
 {
-    TRC("Enter\n");
-
+    // thread will exit
+    detect_thread_run = false;
+    
     // cancel waiting SCardEstablishContext() inside the thread
     if (detect_context) {
         LONG rv = SCardCancel(detect_context);
         CHECK("SCardCancel", rv);
     }
     pthread_join(detect_thread_id, NULL);
-
-    TRC("Leave\n");
+    DBG("Destroyed detect thread\n");
 }
 
 
@@ -437,9 +430,9 @@ void sc_detect_thread_stop()
 
 static SCARDCONTEXT worker_context = 0;
 static pthread_t worker_thread_id = 0;
-static bool l_run = true;
-static pthread_mutex_t l_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t l_condition = PTHREAD_COND_INITIALIZER;
+static bool worker_thread_run = true;
+static pthread_mutex_t worker_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t worker_condition = PTHREAD_COND_INITIALIZER;
 
 #define SC_REQUEST_MAXLEN              128
 
@@ -469,19 +462,17 @@ static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE
  * @param  ptr NULL
  * @return     0
  */
-static void *sc_access_thread_fnc(void *ptr)
+static void *worker_thread_fnc(void *ptr)
 {
-    TRC("Enter\n");
-
     ULONG req;
     ULONG req_id;
     ULONG req_id_handled;
     ULONG req_len;
     BYTE req_data[SC_REQUEST_MAXLEN];
 
-    LONG rv = sc_create_context(&worker_context);
-    DBG("create CONTEXT 0x%08lX\n", worker_context);
-    assert(rv == SCARD_S_SUCCESS);
+    bool rv = sc_create_context(&worker_context);
+    DBG("created CONTEXT 0x%08lX\n", worker_context);
+    assert(rv != false);
 
     while (1) {
         TRC("loop, waiting for request ..\n");
@@ -489,9 +480,9 @@ static void *sc_access_thread_fnc(void *ptr)
 
         TRC("waiting for condition ..\n");
         // Lock mutex and then wait for signal to relase mutex
-        pthread_mutex_lock(&l_mutex);
+        pthread_mutex_lock(&worker_mutex);
         // mutex gets unlocked if condition variable is signaled
-        pthread_cond_wait(&l_condition, &l_mutex);
+        pthread_cond_wait(&worker_condition, &worker_mutex);
         // this thread can now handle new request
         
         // reset handled request ID
@@ -501,19 +492,19 @@ static void *sc_access_thread_fnc(void *ptr)
         req = l_req;
         req_len = l_req_len;
         memcpy(req_data, l_req_data, l_req_len);
-        pthread_mutex_unlock(&l_mutex);
+        pthread_mutex_unlock(&worker_mutex);
         TRC("condition met!\n");
 
-        if (! l_run) {
+        if (! worker_thread_run) {
             TRC("stopping thread ..\n");
             break;
         }
 
         // invoke request handling function from this thread!
         req_id_handled = sc_handle_request(req_id, req, req_data, req_len);
-        pthread_mutex_lock(&l_mutex);
+        pthread_mutex_lock(&worker_mutex);
         l_req_id_handled = req_id_handled; 
-        pthread_mutex_unlock(&l_mutex);
+        pthread_mutex_unlock(&worker_mutex);
 
         // XXX not calling any SCardGetStatusChange() in this thread
         // if the wait was cancelled (i.e. exiting the app), exit the thread!
@@ -523,10 +514,9 @@ static void *sc_access_thread_fnc(void *ptr)
         // }
     }
 
-    DBG("destroy CONTEXT 0x%08lX\n", worker_context);
+    DBG("destroying CONTEXT 0x%08lX\n", worker_context);
     sc_destroy_context(&worker_context);
 
-    TRC("Leave\n");
     return 0;
 }
 
@@ -534,18 +524,15 @@ static void *sc_access_thread_fnc(void *ptr)
  * Start the reader and card state change thread.
  * @return true - success, false - failure
  */
-bool sc_access_thread_start()
+static bool worker_thread_start()
 {
-    TRC("Enter\n");
-
-    int rv = pthread_create(&worker_thread_id, NULL, sc_access_thread_fnc, NULL);
+    int rv = pthread_create(&worker_thread_id, NULL, worker_thread_fnc, NULL);
     if (rv) {
         ERR("Error - pthread_create() return code: %d\n", rv);
-        TRC("Leave false\n");
         return false;
     }
 
-    TRC("Leave true\n");
+    DBG("Created worker thread\n");
     return true;
 }
 
@@ -553,29 +540,25 @@ bool sc_access_thread_start()
  * Stop the reader and card state change thread.
  * @return none
  */
-void sc_access_thread_stop()
+static void worker_thread_stop()
 {
-    TRC("Enter\n");
+    // thread will exit
+    worker_thread_run = false;
 
-    // XXX not calling any SCardGetStatusChange() in this thread
-    // // cancel waiting SCardEstablishContext() inside the thread
-    // if (worker_context) {
-    //     LONG rv = SCardCancel(worker_context);
-    //     CHECK("SCardCancel", rv);
-    // }
-
-    // thread will exit after condition is set next
-    l_run = false;
-
-    pthread_mutex_lock(&l_mutex);
+    pthread_mutex_lock(&worker_mutex);
     // signal waiting thread by freeing the mutex
-    pthread_cond_signal(&l_condition);
-    pthread_mutex_unlock(&l_mutex);
+    pthread_cond_signal(&worker_condition);
+    pthread_mutex_unlock(&worker_mutex);
 
     pthread_join(worker_thread_id, NULL);
-
-    TRC("Leave\n");
+    DBG("Destroyed worker thread\n");
 }
+
+
+
+
+
+
 
 static void sc_card_request_dump()
 {
@@ -592,7 +575,7 @@ static void sc_card_request_dump()
 static ULONG sc_request(const ULONG req, const LPBYTE req_data, const ULONG req_len)
 {
     TRC("Enter\n");
-    pthread_mutex_lock(&l_mutex);
+    pthread_mutex_lock(&worker_mutex);
     // save new card request
     l_req = req;
     l_req_len = req_len;
@@ -600,8 +583,8 @@ static ULONG sc_request(const ULONG req, const LPBYTE req_data, const ULONG req_
     l_req_id++;
     sc_card_request_dump();
     // signal waiting thread to handle the command
-    pthread_cond_signal(&l_condition);
-    pthread_mutex_unlock(&l_mutex);
+    pthread_cond_signal(&worker_condition);
+    pthread_mutex_unlock(&worker_mutex);
 
     TRC("Leave %lu\n", l_req_id);
     return l_req_id;
@@ -908,21 +891,25 @@ static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE
 
 bool sc_is_request_handled()
 {
-    pthread_mutex_lock(&l_mutex);
+    pthread_mutex_lock(&worker_mutex);
     bool rv = (l_req_id == l_req_id_handled) ? true : false;
-    pthread_mutex_unlock(&l_mutex);
+    pthread_mutex_unlock(&worker_mutex);
     return rv;
 }
 
 
 
+/**
+ * exported user API
+ */
+
 bool sc_init()
 {
     TRC("Enter\n");
 
-    bool rv = sc_detect_thread_start();
+    bool rv = detect_thread_start();
     assert(rv != false);
-    rv = sc_access_thread_start();
+    rv = worker_thread_start();
     assert(rv != false);
 
     TRC("Leave %d\n", rv);
@@ -933,8 +920,8 @@ void sc_destroy()
 {
     TRC("Enter\n")
     
-    sc_detect_thread_stop();
-    sc_access_thread_stop();
+    detect_thread_stop();
+    worker_thread_stop();
 
     TRC("Leave\n");
 }

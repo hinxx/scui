@@ -95,8 +95,8 @@ struct state {
     uint32_t user_value;
 };
 
-LONG sc_create_context(PSCARDCONTEXT context);
-LONG sc_destroy_context(PSCARDCONTEXT context);
+// LONG sc_create_context(PSCARDCONTEXT context);
+// LONG sc_destroy_context(PSCARDCONTEXT context);
 LONG sc_detect_reader(const SCARDCONTEXT context);
 LONG sc_wait_for_reader(const SCARDCONTEXT context, const ULONG timeout);
 LONG sc_wait_for_card(const SCARDCONTEXT context, const ULONG timeout);
