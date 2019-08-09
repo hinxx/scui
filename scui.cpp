@@ -315,8 +315,38 @@ static bool select_memory_card(const SCARDHANDLE handle)
         return false;
     }
     // response is 0 bytes long
-    assert(recv_len == 0);
     DBG("card selected!\n");
+    return true;
+}
+
+static bool get_error_counter(const SCARDHANDLE handle)
+{
+    // REF-ACR38x-CCID-6.05.pdf, 9.3.6.3. READ_PRESENTATION_ERROR_COUNTER_MEMORY_CARD
+    // for SLE 4442 and SLE 5542 memory cards
+    BYTE send_data[] = {0xFF, 0xB1, 0x00, 0x00, 0x04};
+    ULONG send_len = sizeof(send_data);
+    BYTE recv_data[SC_MAX_REQUEST_LEN+1] = {0};
+    ULONG recv_len = sizeof(recv_data);
+    BYTE sw_data[2+1] = {0};
+    bool rv = do_xfer(handle, send_data, send_len, recv_data, &recv_len, sw_data);
+    if (! rv) {
+        return false;
+    }
+    // success is 90 00
+    rv = check_sw(sw_data, 0x90, 0x00);
+    if (! rv) {
+        return false;
+    }
+    // response is 4 bytes long
+    assert(recv_len == 4);
+    pthread_mutex_lock(&g_state_mutex);
+    g_state.card_pin_retries = recv_data[0];
+    pthread_mutex_unlock(&g_state_mutex);
+    // counter value: 0x07          indicates success,
+    //                0x03 and 0x01 indicate failed verification
+    //                0x00          indicates locked card (no retries left)
+    DBG("PIN retries left (should be 7!!): %u\n", g_state.card_pin_retries);
+    DBG("PIN bytes (valid after present): %02X %02X %02X\n", recv_data[1], recv_data[2], recv_data[3]);
     return true;
 }
 
@@ -324,16 +354,6 @@ LONG sc_read_card(const SCARDHANDLE handle, BYTE address, BYTE len, LPBYTE recv_
 {
     // REF-ACR38x-CCID-6.05.pdf, 9.3.6.2.READ_MEMORY_CARD
     BYTE send_data[] = {0xFF, 0xB0, 0x00, address, len};
-    ULONG send_len = sizeof(send_data);
-    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
-    return rv;
-}
-
-LONG sc_get_error_counter(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
-{
-    // REF-ACR38x-CCID-6.05.pdf, 9.3.6.3. READ_PRESENTATION_ERROR_COUNTER_MEMORY_CARD
-    // for SLE 4442 and SLE 5542 memory cards
-    BYTE send_data[] = {0xFF, 0xB1, 0x00, 0x00, 0x04};
     ULONG send_len = sizeof(send_data);
     LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
     return rv;
@@ -616,18 +636,6 @@ static void worker_thread_stop()
 
 
 
-// static void sc_card_request_dump()
-// {
-//     char buf[3*SC_REQUEST_MAXLEN] = {0};
-//     int off = 0;
-//     for (ULONG i = 0; i < l_req_len; i++) {
-//         off += sprintf(buf + off, "%02X ", l_req_data[i]);
-//     }
-//     DBG("REQ ID %lu, REQ %ld, REQ_LEN %lu, REQ_DATA %s\n", l_req_id, l_req, l_req_len, buf);
-// }
-
-// card request client (i.e. UI) interface
-
 static void do_request(const uint32_t request)
 {
     TRC("Enter\n");
@@ -663,37 +671,22 @@ static bool process_identify()
     if (! rv) {
         return false;
     }
-    
+
     rv = select_memory_card(worker_card);
     if (! rv) {
         return false;
     }
-    
+
+    rv = get_error_counter(worker_card);
+    if (! rv) {
+        return false;
+    }
+
     return true;
 }
 
 
 
-
-// bool sc_request_connect()
-// {
-//     return sc_request(SC_REQUEST_CONNECT, NULL, 0);
-// }
-
-// bool sc_request_disconnect()
-// {
-//     return sc_request(SC_REQUEST_DISCONNECT, NULL, 0);
-// }
-
-// bool sc_request_reader_info()
-// {
-//     return sc_request(SC_REQUEST_READER_INFO, NULL, 0);
-// }
-
-// bool sc_request_select_card()
-// {
-//     return sc_request(SC_REQUEST_SELECT_CARD, NULL, 0);
-// }
 
 // bool sc_request_read_card()
 // {
@@ -703,11 +696,6 @@ static bool process_identify()
 //     // read 16 bytes (4x 32-bit integers)
 //     data[1] = 16;
 //     return sc_request(SC_REQUEST_READ_CARD, data, 2);
-// }
-
-// bool sc_request_error_counter()
-// {
-//     return sc_request(SC_REQUEST_ERROR_COUNTER, NULL, 0);
 // }
 
 // // FIXME: need to handle default pin (0xFF 0xFF 0xFF) presentation for blank cards!
@@ -746,24 +734,6 @@ static bool process_identify()
 
 #if 0
 
-static void sc_handle_request_select_card()
-{
-    BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
-    ULONG recv_len = SC_BUFFER_MAXLEN - 2;
-    BYTE sw_data[2] = {0};
-    assert(worker_card != 0);
-    LONG rv = sc_select_memory_card(worker_card, recv_data, &recv_len, sw_data);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-    // response is 0 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.1. SELECT_CARD_TYPE
-    assert(recv_len == 0);
-    rv = check_sw(sw_data, 0x90, 0x00);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-}
-
 static void sc_handle_request_read_card(const LPBYTE req_data, const ULONG req_len)
 {
     BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
@@ -786,30 +756,6 @@ static void sc_handle_request_read_card(const LPBYTE req_data, const ULONG req_l
     DBG("CARD ID: %lu\n", id);
     DBG("TOTAL: %lu\n", total);
     DBG("VALUE: %lu\n", value);
-    rv = check_sw(sw_data, 0x90, 0x00);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-}
-
-static void sc_handle_request_error_counter()
-{
-    BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
-    ULONG recv_len = SC_BUFFER_MAXLEN - 2;
-    BYTE sw_data[2] = {0};
-    assert(worker_card != 0);
-    LONG rv = sc_get_error_counter(worker_card, recv_data, &recv_len, sw_data);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-    // response is 4 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.3. READ_PRESENTATION_ERROR_COUNTER_MEMORY_CARD
-    assert(recv_len == 4);
-    // to_hex(recv_data, recv_len);
-    BYTE counter = recv_data[0];
-    // counter value: 0x07          indicates success,
-    //                0x03 and 0x01 indicate failed verification
-    //                0x00          indicates locked card (no retries left)
-    DBG("ERROR COUNTER: %u\n", counter);
     rv = check_sw(sw_data, 0x90, 0x00);
     if (rv != SCARD_S_SUCCESS) {
         return;
@@ -880,54 +826,6 @@ static void sc_handle_request_write_card(const LPBYTE req_data, const ULONG req_
     //     return;
     // }
 }
-
-
-static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE req_data, const ULONG req_len)
-{
-    switch(req) {
-    case SC_REQUEST_CONNECT:
-        sc_handle_request_connect();
-    break;
-    case SC_REQUEST_DISCONNECT:
-        sc_handle_request_disconnect();
-    break;
-    case SC_REQUEST_READER_INFO:
-        sc_handle_request_reader_info();
-    break;
-    case SC_REQUEST_SELECT_CARD:
-        sc_handle_request_select_card();
-    break;
-    case SC_REQUEST_READ_CARD:
-        sc_handle_request_read_card(req_data, req_len);
-    break;
-    case SC_REQUEST_ERROR_COUNTER:
-        sc_handle_request_error_counter();
-    break;
-    case SC_REQUEST_PRESENT_PIN:
-        sc_handle_request_present_pin(req_data, req_len);
-    break;
-    case SC_REQUEST_CHANGE_PIN:
-        sc_handle_request_change_pin(req_data, req_len);
-    break;
-    case SC_REQUEST_WRITE_CARD:
-        sc_handle_request_write_card(req_data, req_len);
-    break;
-    default:
-        return 0;
-    break;
-    }
-
-    return req_id;
-}
-
-bool sc_is_request_handled()
-{
-    pthread_mutex_lock(&worker_mutex);
-    bool rv = (l_req_id == l_req_id_handled) ? true : false;
-    pthread_mutex_unlock(&worker_mutex);
-    return rv;
-}
-
 
 #endif
 

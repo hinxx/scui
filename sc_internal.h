@@ -88,7 +88,7 @@ struct state {
     // bool card_personalized;
     // bool card_unlocked;
     // bool card_identified;
-    // uint8_t card_error_counter;
+    BYTE card_pin_retries;
     PSCARD_IO_REQUEST card_protocol;
 
     // user
