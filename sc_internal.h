@@ -61,7 +61,7 @@
         return rv; \
     }
 
-#define SC_BUFFER_MAXLEN              256
+// #define SC_BUFFER_MAXLEN              256
 #define SC_MAX_READERNAME_LEN           128
 #define SC_MAX_REQUEST_LEN              255
 #define SC_MAX_FIRMWARE_LEN             10

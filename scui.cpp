@@ -21,7 +21,6 @@ const char *pcsc_stringify_error(const LONG rv)
 // static BOOL g_sc_card_connected = 0;
 // static SCARDHANDLE g_sc_card_handle = 0;
 // static PSCARD_IO_REQUEST g_sc_pci= 0;
-static char l_hexbuf[3*SC_BUFFER_MAXLEN] = {0};
 
 
 static struct state g_state = {0};
@@ -32,12 +31,13 @@ static pthread_mutex_t g_state_mutex = PTHREAD_MUTEX_INITIALIZER;
  * utilities
  */
 
+static char s_hexbuf[3*SC_MAX_REQUEST_LEN] = {0};
 static void to_hex(LPBYTE data, ULONG len)
 {
     int off = 0;
-    memset(l_hexbuf, 0, 3*SC_BUFFER_MAXLEN);
+    memset(s_hexbuf, 0, 3*SC_MAX_REQUEST_LEN);
     for (ULONG i = 0; i < len; i++) {
-        off += sprintf(l_hexbuf + off, "%02X ", data[i]);
+        off += sprintf(s_hexbuf + off, "%02X ", data[i]);
     }
 }
 
@@ -221,9 +221,9 @@ static bool do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULON
 {
     // dump request
     to_hex(send_data, send_len);
-    DBG("SEND: [%lu]: %s\n", send_len, l_hexbuf);
+    DBG("SEND: [%lu]: %s\n", send_len, s_hexbuf);
 
-    BYTE tmp_buf[SC_BUFFER_MAXLEN];
+    BYTE tmp_buf[SC_MAX_REQUEST_LEN+1];
     // SW1 and SW2 will be added at the end of the response
     ULONG tmp_len = *recv_len + 2;
     assert(g_state.card_protocol != 0);
@@ -234,7 +234,7 @@ static bool do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULON
     }
     // dump response
     to_hex(tmp_buf, tmp_len);
-    DBG("RECV: [%lu]: %s\n", tmp_len, l_hexbuf);
+    DBG("RECV: [%lu]: %s\n", tmp_len, s_hexbuf);
 
     // SW1 and SW2 are at the end of response
     tmp_len -= 2;
@@ -271,11 +271,12 @@ static bool get_reader_info(const SCARDHANDLE handle)
     if (! rv) {
         return false;
     }
+    // success is 90 00
     rv = check_sw(sw_data, 0x90, 0x00);
     if (! rv) {
         return false;
     }
-    // response is 16 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.4.1. GET_READER_INFORMATION
+    // response is 16 bytes long
     assert(recv_len == 16);
     // 10 bytes of firmware version
     pthread_mutex_lock(&g_state_mutex);
@@ -295,14 +296,28 @@ static bool get_reader_info(const SCARDHANDLE handle)
     return true;
 }
 
-LONG sc_select_memory_card(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+static bool select_memory_card(const SCARDHANDLE handle)
 {
     // REF-ACR38x-CCID-6.05.pdf, 9.3.6.1. SELECT_CARD_TYPE
     // working with memory cards of type SLE 4432, SLE 4442, SLE 5532, SLE 5542
     BYTE send_data[] = {0xFF, 0xA4, 0x00, 0x00, 0x01, 0x06};
     ULONG send_len = sizeof(send_data);
-    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
-    return rv;
+    BYTE recv_data[SC_MAX_REQUEST_LEN+1] = {0};
+    ULONG recv_len = sizeof(recv_data);
+    BYTE sw_data[2+1] = {0};
+    bool rv = do_xfer(handle, send_data, send_len, recv_data, &recv_len, sw_data);
+    if (! rv) {
+        return false;
+    }
+    // success is 90 00
+    rv = check_sw(sw_data, 0x90, 0x00);
+    if (! rv) {
+        return false;
+    }
+    // response is 0 bytes long
+    assert(recv_len == 0);
+    DBG("card selected!\n");
+    return true;
 }
 
 LONG sc_read_card(const SCARDHANDLE handle, BYTE address, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
@@ -347,13 +362,13 @@ LONG sc_change_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG
 LONG sc_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
 {
     // REF-ACR38x-CCID-6.05.pdf, 9.3.6.5. WRITE_MEMORY_CARD
-    BYTE send_data[SC_BUFFER_MAXLEN];
+    BYTE send_data[SC_MAX_REQUEST_LEN+1];
     send_data[0] = 0xFF;
     send_data[1] = 0xD0;
     send_data[2] = 0x00;
     send_data[3] = address;
     send_data[4] = len;
-    assert(len + 5 <= SC_BUFFER_MAXLEN);
+    assert(len + 5 <= SC_MAX_REQUEST_LEN);
     memcpy(&send_data[5], data, len);
     ULONG send_len = len + 5;
     LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
@@ -649,6 +664,11 @@ static bool process_identify()
         return false;
     }
     
+    rv = select_memory_card(worker_card);
+    if (! rv) {
+        return false;
+    }
+    
     return true;
 }
 
@@ -722,58 +742,9 @@ static bool process_identify()
 
 
 // card request handlers
+
+
 #if 0
-static void sc_handle_request_connect()
-{
-    // only connect to card if not already connected
-    if (worker_card) {
-        ERR("already connected to card\n");
-        return;
-    }
-
-    LONG rv = connect_card(worker_context, &worker_card);
-    if (rv == SCARD_S_SUCCESS) {
-        assert(worker_card != 0);
-    }
-}
-
-static void sc_handle_request_disconnect()
-{
-    assert(worker_card != 0);
-    disconnect_card(&worker_card);
-    assert(worker_card == 0);
-}
-
-static void sc_handle_request_reader_info()
-{
-    BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
-    ULONG recv_len = SC_BUFFER_MAXLEN - 2;
-    BYTE sw_data[2] = {0};
-    assert(worker_card != 0);
-    LONG rv = sc_get_reader_info(worker_card, recv_data, &recv_len, sw_data);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-    // response is 16 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.4.1. GET_READER_INFORMATION
-    assert(recv_len == 16);
-    BYTE firmware[11] = {0};
-    memcpy(firmware, recv_data, 10);
-    DBG("firmware: %s\n", firmware);
-    BYTE send_max = recv_data[10];
-    DBG("send max %d bytes\n", send_max);
-    BYTE recv_max = recv_data[11];
-    DBG("recv max %d bytes\n", recv_max);
-    USHORT card_types = (recv_data[12] << 8) | recv_data[13];
-    DBG("card types 0x%04X\n", card_types);
-    BYTE card_sel = recv_data[14];
-    DBG("selected card 0x%02X\n", card_sel);
-    BYTE card_stat = recv_data[15];
-    DBG("card status %d\n", card_stat);
-    rv = check_sw(sw_data, 0x90, 0x00);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-}
 
 static void sc_handle_request_select_card()
 {
