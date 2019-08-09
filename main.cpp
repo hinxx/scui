@@ -124,6 +124,10 @@ int main(int, char**)
     bool have_card = false;
     bool connected_card = false;
     bool identify_card = false;
+    uint32_t magic = 0;
+    uint32_t id = 0;
+    uint32_t value = 0;
+    uint32_t total = 0;
 
     // ULONG req_id = 0;
     // SCard initialize
@@ -160,11 +164,20 @@ int main(int, char**)
             ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_get_reader_name());
             ImGui::Text("Card inserted: %s", have_card ? "YES" : "NO");
             ImGui::Text("Identify card: %s", identify_card ? "YES" : "NO");
+            connected_card = sc_is_card_connected();
+            ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");
 
             if (identify_card) {
                 sc_identify_card();
                 identify_card = false;
             }
+
+            sc_user_data(&magic, &id, &value, &total);
+            ImGui::Text("User info:");
+            ImGui::Text(" Magic: %d", magic);
+            ImGui::Text("    ID: %d", id);
+            ImGui::Text(" Value: %d", value);
+            ImGui::Text(" Total: %d", total);
 
 /*
             if (ImGui::Button("Card connect")) {
@@ -203,8 +216,6 @@ int main(int, char**)
                 req_id = sc_request_write_card();
             }
 */
-            connected_card = sc_is_card_connected();
-            ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");
 
             // ImGui::Text("Req ID: %lu", req_id);
 

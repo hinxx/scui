@@ -34,5 +34,6 @@ char *sc_get_reader_name();
 bool sc_is_card_connected();
 void sc_identify_card();
 void sc_forget_card();
+void sc_user_data(uint32_t *magic, uint32_t *id, uint32_t *value, uint32_t *total);
 
 #endif // SC_H_

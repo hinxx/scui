@@ -350,13 +350,34 @@ static bool get_error_counter(const SCARDHANDLE handle)
     return true;
 }
 
-LONG sc_read_card(const SCARDHANDLE handle, BYTE address, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+static bool read_user_data(const SCARDHANDLE handle, BYTE address, BYTE len)
 {
     // REF-ACR38x-CCID-6.05.pdf, 9.3.6.2.READ_MEMORY_CARD
     BYTE send_data[] = {0xFF, 0xB0, 0x00, address, len};
     ULONG send_len = sizeof(send_data);
-    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
-    return rv;
+    BYTE recv_data[SC_MAX_REQUEST_LEN+1] = {0};
+    ULONG recv_len = sizeof(recv_data);
+    BYTE sw_data[2+1] = {0};
+    bool rv = do_xfer(handle, send_data, send_len, recv_data, &recv_len, sw_data);
+    if (! rv) {
+        return false;
+    }
+    // success is 90 00
+    rv = check_sw(sw_data, 0x90, 0x00);
+    if (! rv) {
+        return false;
+    }
+    // response is req_data[1] bytes long
+    assert(recv_len == len);
+    g_state.user_magic = (recv_data[3] << 24  | recv_data[2] << 16  | recv_data[1] << 8  | recv_data[0]);
+    g_state.user_id    = (recv_data[7] << 24  | recv_data[6] << 16  | recv_data[5] << 8  | recv_data[4]);
+    g_state.user_total = (recv_data[11] << 24 | recv_data[10] << 16 | recv_data[9] << 8  | recv_data[8]);
+    g_state.user_value = (recv_data[15] << 24 | recv_data[14] << 16 | recv_data[13] << 8 | recv_data[12]);
+    DBG("MAGIC: %u\n", g_state.user_magic);
+    DBG("CARD ID: %u\n", g_state.user_id);
+    DBG("TOTAL: %u\n", g_state.user_total);
+    DBG("VALUE: %u\n", g_state.user_value);
+    return true;
 }
 
 LONG sc_present_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
@@ -406,6 +427,29 @@ static SCARDCONTEXT detect_context = 0;
 static pthread_t detect_thread_id = 0;
 static bool detect_thread_run = true;
 
+
+static void reset_reader_state()
+{
+    memset(g_state.reader_name, 0, SC_MAX_READERNAME_LEN);
+    memset(g_state.reader_firmware, 0, SC_MAX_FIRMWARE_LEN);
+    g_state.reader_max_send = 0;
+    g_state.reader_max_recv = 0;
+    g_state.reader_card_types = 0;
+    g_state.reader_selected_card = 0;
+    g_state.reader_card_status = 0;
+    g_state.reader_state = 0;
+}
+
+static void reset_card_state()
+{
+    g_state.card_pin_retries = 0;
+    g_state.card_protocol = 0;
+    g_state.user_id = 0;
+    g_state.user_magic = 0;
+    g_state.user_value = 0;
+    g_state.user_total = 0;
+}
+
 /**
  * Thread routine which waits for change in reader and card state. 
  * @param  ptr NULL
@@ -416,6 +460,8 @@ static void *detect_thread_fnc(void *ptr)
     bool rv = create_context(&detect_context);
     DBG("created CONTEXT 0x%08lX\n", detect_context);
     assert(rv != false);
+
+    reset_reader_state();
 
     while (1) {
         TRC("loop, waiting for reader to arrive or leave ..\n");
@@ -435,11 +481,14 @@ static void *detect_thread_fnc(void *ptr)
             } else {
                 DBG("NO CARD!\n");
                 DBG("waiting for card insert..\n");
+                reset_card_state();
                 wait_for_card_insert(detect_context);
             }
         } else {
             DBG("NO READER\n");
             DBG("waiting for reader..\n");
+            reset_reader_state();
+            reset_card_state();
             wait_for_reader(detect_context, INFINITE);
         }
 
@@ -682,6 +731,15 @@ static bool process_identify()
         return false;
     }
 
+    // read from user data start
+    BYTE address = 64;
+    // read 16 bytes (4x 32-bit integers)
+    BYTE length = 16;
+    rv = read_user_data(worker_card, address, length);
+    if (! rv) {
+        return false;
+    }
+
     return true;
 }
 
@@ -888,4 +946,12 @@ void sc_forget_card()
 {
     TRC("Enter\n")
     disconnect_card(&worker_card);
+}
+
+void sc_user_data(uint32_t *magic, uint32_t *id, uint32_t *value, uint32_t *total)
+{
+    *magic = g_state.user_magic;
+    *id = g_state.user_id;
+    *value = g_state.user_value;
+    *total = g_state.user_total;
 }

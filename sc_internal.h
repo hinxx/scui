@@ -92,10 +92,10 @@ struct state {
     PSCARD_IO_REQUEST card_protocol;
 
     // user
-    // uint32_t user_magic;
-    // uint32_t user_id;
-    // uint32_t user_total;
-    // uint32_t user_value;
+    uint32_t user_magic;
+    uint32_t user_id;
+    uint32_t user_total;
+    uint32_t user_value;
 };
 
 // LONG sc_create_context(PSCARDCONTEXT context);
