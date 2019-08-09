@@ -15,16 +15,17 @@ const char *pcsc_stringify_error(const LONG rv)
 }
 #endif
 
-static char g_sc_reader_name[MAX_READERNAME] = {0};
-static LONG g_sc_reader_state = SCARD_STATE_UNAWARE;
-static pthread_mutex_t g_sc_reader_mutex = PTHREAD_MUTEX_INITIALIZER;
+// static char g_sc_reader_name[MAX_READERNAME] = {0};
+// static LONG g_sc_reader_state = SCARD_STATE_UNAWARE;
+// static pthread_mutex_t g_sc_reader_mutex = PTHREAD_MUTEX_INITIALIZER;
 // static BOOL g_sc_card_connected = 0;
 // static SCARDHANDLE g_sc_card_handle = 0;
-static PSCARD_IO_REQUEST g_sc_pci= 0;
+// static PSCARD_IO_REQUEST g_sc_pci= 0;
 static char l_hexbuf[3*SC_BUFFER_MAXLEN] = {0};
 
 
-struct state g_state = {0};
+static struct state g_state = {0};
+static pthread_mutex_t g_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 /**
@@ -74,16 +75,16 @@ static void destroy_context(PSCARDCONTEXT context)
 
 static void detect_reader(const SCARDCONTEXT context)
 {
-    DWORD dwReaders = MAX_READERNAME;
-    BYTE mszReaders[MAX_READERNAME] = {0};
+    DWORD dwReaders = SC_MAX_READERNAME_LEN;
+    BYTE mszReaders[SC_MAX_READERNAME_LEN] = {0};
     LPSTR mszGroups = nullptr;
 
     LONG rv = SCardListReaders(context, mszGroups, (LPSTR)&mszReaders, &dwReaders);
     CHECK("SCardListReaders", rv);
     // save reader name (NULL if not detected)
-    pthread_mutex_lock(&g_sc_reader_mutex);
-    strncpy(g_sc_reader_name, (LPCSTR)mszReaders, MAX_READERNAME);
-    pthread_mutex_unlock(&g_sc_reader_mutex);
+    pthread_mutex_lock(&g_state_mutex);
+    strncpy(g_state.reader_name, (LPCSTR)mszReaders, SC_MAX_READERNAME_LEN);
+    pthread_mutex_unlock(&g_state_mutex);
 }
 
 static void wait_for_reader(const SCARDCONTEXT context, const ULONG timeout)
@@ -105,11 +106,11 @@ static void wait_for_reader(const SCARDCONTEXT context, const ULONG timeout)
 
 static void wait_for_card(const SCARDCONTEXT context, const ULONG timeout)
 {
-    pthread_mutex_lock(&g_sc_reader_mutex);
-    char reader_name[MAX_READERNAME] = {0};
-    strncpy(reader_name, g_sc_reader_name, MAX_READERNAME);
-    LONG reader_state = g_sc_reader_state;
-    pthread_mutex_unlock(&g_sc_reader_mutex);
+    pthread_mutex_lock(&g_state_mutex);
+    char reader_name[SC_MAX_READERNAME_LEN] = {0};
+    strncpy(reader_name, g_state.reader_name, SC_MAX_READERNAME_LEN);
+    LONG reader_state = g_state.reader_state;
+    pthread_mutex_unlock(&g_state_mutex);
 
     SCARD_READERSTATE rgReaderStates[1];
     rgReaderStates[0].szReader = reader_name;
@@ -121,11 +122,11 @@ static void wait_for_card(const SCARDCONTEXT context, const ULONG timeout)
     CHECK("SCardGetStatusChange", rv);
     
     if (rv == SCARD_S_SUCCESS) {
-        pthread_mutex_lock(&g_sc_reader_mutex);
-        g_sc_reader_state = rgReaderStates[0].dwEventState;
-        pthread_mutex_unlock(&g_sc_reader_mutex);
+        pthread_mutex_lock(&g_state_mutex);
+        g_state.reader_state = rgReaderStates[0].dwEventState;
+        pthread_mutex_unlock(&g_state_mutex);
     }
-    DBG("leave SCardGetStatusChange: reader_state=0x%08lX\n", g_sc_reader_state);
+    DBG("leave SCardGetStatusChange: reader_state=0x%08lX\n", g_state.reader_state);
 }
 
 static void probe_for_card(const SCARDCONTEXT context)
@@ -145,32 +146,34 @@ static void wait_for_card_insert(const SCARDCONTEXT context)
 
 static bool reader_presence()
 {
-    pthread_mutex_lock(&g_sc_reader_mutex);
-    bool rv = (g_sc_reader_name[0] != 0) ? true : false;
-    pthread_mutex_unlock(&g_sc_reader_mutex);
+    pthread_mutex_lock(&g_state_mutex);
+    bool rv = (g_state.reader_name[0] != 0) ? true : false;
+    pthread_mutex_unlock(&g_state_mutex);
     return rv;
 }
 
 static bool card_presence()
 {
-    pthread_mutex_lock(&g_sc_reader_mutex);
-    bool rv = (g_sc_reader_state & SCARD_STATE_PRESENT) ? true : false;
-    pthread_mutex_unlock(&g_sc_reader_mutex);
+    pthread_mutex_lock(&g_state_mutex);
+    bool rv = (g_state.reader_state & SCARD_STATE_PRESENT) ? true : false;
+    pthread_mutex_unlock(&g_state_mutex);
     return rv;
 }
 
 static char *reader_name()
 {
-    return g_sc_reader_name;
+    // caller should lock the access to reader_name
+    // and copy the contents to local buffer (variable)
+    return g_state.reader_name;
 }
 
 static bool connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle)
 {
     DWORD dwActiveProtocol;
-    pthread_mutex_lock(&g_sc_reader_mutex);
-    char reader_name[MAX_READERNAME] = {0};
-    strncpy(reader_name, g_sc_reader_name, MAX_READERNAME);
-    pthread_mutex_unlock(&g_sc_reader_mutex);
+    pthread_mutex_lock(&g_state_mutex);
+    char reader_name[SC_MAX_READERNAME_LEN] = {0};
+    strncpy(reader_name, g_state.reader_name, SC_MAX_READERNAME_LEN);
+    pthread_mutex_unlock(&g_state_mutex);
     LONG rv = SCardConnect(context, reader_name, SCARD_SHARE_SHARED,
         SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1, handle, &dwActiveProtocol);
     CHECK("SCardConnect", rv);
@@ -178,20 +181,25 @@ static bool connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle)
         return false;
     }
 
+    PSCARD_IO_REQUEST card_protocol = nullptr;
     switch(dwActiveProtocol) {
     case SCARD_PROTOCOL_T0:
-        g_sc_pci = (SCARD_IO_REQUEST *)SCARD_PCI_T0;
+        card_protocol = (SCARD_IO_REQUEST *)SCARD_PCI_T0;
         DBG("using T0 protocol\n");
         break;
 
     case SCARD_PROTOCOL_T1:
-        g_sc_pci = (SCARD_IO_REQUEST *)SCARD_PCI_T1;
+        card_protocol = (SCARD_IO_REQUEST *)SCARD_PCI_T1;
         DBG("using T1 protocol\n");
         break;
     default:
         ERR("failed to get proper protocol\n");
         return false;
     }
+
+    pthread_mutex_lock(&g_state_mutex);
+    g_state.card_protocol = card_protocol;
+    pthread_mutex_unlock(&g_state_mutex);
 
     DBG("connected to card!\n");
     return true;
@@ -202,7 +210,9 @@ static void disconnect_card(PSCARDHANDLE handle)
     LONG rv = SCardDisconnect(*handle, SCARD_UNPOWER_CARD);
     CHECK("SCardDisconnect", rv);
     // ignore return status
-    g_sc_pci = 0;
+    pthread_mutex_lock(&g_state_mutex);
+    g_state.card_protocol = 0;
+    pthread_mutex_unlock(&g_state_mutex);
     *handle = 0;
     DBG("disconnected from card!\n");
 }
@@ -216,8 +226,8 @@ static bool do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULON
     BYTE tmp_buf[SC_BUFFER_MAXLEN];
     // SW1 and SW2 will be added at the end of the response
     ULONG tmp_len = *recv_len + 2;
-    assert(g_sc_pci != 0);
-    ULONG rv = SCardTransmit(handle, g_sc_pci, send_data, send_len, NULL, tmp_buf, &tmp_len);
+    assert(g_state.card_protocol != 0);
+    ULONG rv = SCardTransmit(handle, g_state.card_protocol, send_data, send_len, NULL, tmp_buf, &tmp_len);
     CHECK("SCardTransmit", rv);
     if (rv != SCARD_S_SUCCESS) {
         return false;
@@ -268,12 +278,14 @@ static bool get_reader_info(const SCARDHANDLE handle)
     // response is 16 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.4.1. GET_READER_INFORMATION
     assert(recv_len == 16);
     // 10 bytes of firmware version
+    pthread_mutex_lock(&g_state_mutex);
     memcpy(g_state.reader_firmware, recv_data, SC_MAX_FIRMWARE_LEN);
     g_state.reader_max_send = recv_data[10];
     g_state.reader_max_recv = recv_data[11];
     g_state.reader_card_types = (recv_data[12] << 8) | recv_data[13];
     g_state.reader_selected_card = recv_data[14];
     g_state.reader_card_status = recv_data[15];
+    pthread_mutex_unlock(&g_state_mutex);
     DBG("firmware: %s\n", g_state.reader_firmware);
     DBG("send max %d bytes\n", g_state.reader_max_send);
     DBG("recv max %d bytes\n", g_state.reader_max_recv);

@@ -74,12 +74,12 @@ struct state {
     // bool reader_attached;
     char reader_name[SC_MAX_READERNAME_LEN+1];
     char reader_firmware[SC_MAX_FIRMWARE_LEN+1];
-    uint8_t reader_max_send;
-    uint8_t reader_max_recv;
-    uint16_t reader_card_types;
-    uint8_t reader_selected_card;
-    uint8_t reader_card_status;
-    // uint32_t reader_state;
+    BYTE reader_max_send;
+    BYTE reader_max_recv;
+    USHORT reader_card_types;
+    BYTE reader_selected_card;
+    BYTE reader_card_status;
+    LONG reader_state;
 
     // card
     // bool card_inserted;
@@ -89,7 +89,7 @@ struct state {
     // bool card_unlocked;
     // bool card_identified;
     // uint8_t card_error_counter;
-    // PSCARD_IO_REQUEST card_protocol;
+    PSCARD_IO_REQUEST card_protocol;
 
     // user
     // uint32_t user_magic;
