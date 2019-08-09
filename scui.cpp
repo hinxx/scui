@@ -24,7 +24,7 @@ static PSCARD_IO_REQUEST g_sc_pci= 0;
 static char l_hexbuf[3*SC_BUFFER_MAXLEN] = {0};
 
 
-struct state state = {0};
+struct state g_state = {0};
 
 
 /**
@@ -197,7 +197,7 @@ static bool connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle)
     return true;
 }
 
-void disconnect_card(PSCARDHANDLE handle)
+static void disconnect_card(PSCARDHANDLE handle)
 {
     LONG rv = SCardDisconnect(*handle, SCARD_UNPOWER_CARD);
     CHECK("SCardDisconnect", rv);
@@ -207,7 +207,7 @@ void disconnect_card(PSCARDHANDLE handle)
     DBG("disconnected from card!\n");
 }
 
-LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG send_len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+static bool do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG send_len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
 {
     // dump request
     to_hex(send_data, send_len);
@@ -220,7 +220,7 @@ LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG se
     ULONG rv = SCardTransmit(handle, g_sc_pci, send_data, send_len, NULL, tmp_buf, &tmp_len);
     CHECK("SCardTransmit", rv);
     if (rv != SCARD_S_SUCCESS) {
-        return rv;
+        return false;
     }
     // dump response
     to_hex(tmp_buf, tmp_len);
@@ -233,29 +233,54 @@ LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG se
     memcpy(sw_data, tmp_buf + tmp_len, 2);
     *recv_len = tmp_len;
 
-    return rv;
+    return true;
 }
 
-LONG sc_check_sw(const LPBYTE sw_data, const BYTE sw1, const BYTE sw2)
+static bool check_sw(const LPBYTE sw_data, const BYTE sw1, const BYTE sw2)
 {
     if ((sw_data[0] == sw1) && (sw_data[1] == sw2)) {
-        DBG("card xfer OK!\n");
-        return SCARD_S_SUCCESS;
+        DBG("xfer SW OK!\n");
+        return true;
     }
     // XXX: anything to do here if SW is not success.. print error?
     //      which SW error codes are possible?
-    ERR("card xfer failed: %02X %02X\n", sw_data[0], sw_data[1]);
+    ERR("xfer SW error: %02X %02X != %02X %02X\n", sw_data[0], sw_data[1], sw1, sw2);
 
-    return SCARD_F_UNKNOWN_ERROR;
+    return false;
 }
 
-LONG sc_get_reader_info(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+static bool get_reader_info(const SCARDHANDLE handle)
 {
     // REF-ACR38x-CCID-6.05.pdf, 9.4.1. GET_READER_INFORMATION
     BYTE send_data[] = {0xFF, 0x09, 0x00, 0x00, 0x10};
     ULONG send_len = sizeof(send_data);
-    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
-    return rv;
+    BYTE recv_data[SC_MAX_REQUEST_LEN+1] = {0};
+    ULONG recv_len = sizeof(recv_data);
+    BYTE sw_data[2+1] = {0};
+    bool rv = do_xfer(handle, send_data, send_len, recv_data, &recv_len, sw_data);
+    if (! rv) {
+        return false;
+    }
+    rv = check_sw(sw_data, 0x90, 0x00);
+    if (! rv) {
+        return false;
+    }
+    // response is 16 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.4.1. GET_READER_INFORMATION
+    assert(recv_len == 16);
+    // 10 bytes of firmware version
+    memcpy(g_state.reader_firmware, recv_data, SC_MAX_FIRMWARE_LEN);
+    g_state.reader_max_send = recv_data[10];
+    g_state.reader_max_recv = recv_data[11];
+    g_state.reader_card_types = (recv_data[12] << 8) | recv_data[13];
+    g_state.reader_selected_card = recv_data[14];
+    g_state.reader_card_status = recv_data[15];
+    DBG("firmware: %s\n", g_state.reader_firmware);
+    DBG("send max %d bytes\n", g_state.reader_max_send);
+    DBG("recv max %d bytes\n", g_state.reader_max_recv);
+    DBG("card types 0x%04X\n", g_state.reader_card_types);
+    DBG("selected card 0x%02X\n", g_state.reader_selected_card);
+    DBG("card status %d\n", g_state.reader_card_status);
+    return true;
 }
 
 LONG sc_select_memory_card(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
@@ -264,7 +289,7 @@ LONG sc_select_memory_card(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *re
     // working with memory cards of type SLE 4432, SLE 4442, SLE 5532, SLE 5542
     BYTE send_data[] = {0xFF, 0xA4, 0x00, 0x00, 0x01, 0x06};
     ULONG send_len = sizeof(send_data);
-    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
     return rv;
 }
 
@@ -273,7 +298,7 @@ LONG sc_read_card(const SCARDHANDLE handle, BYTE address, BYTE len, LPBYTE recv_
     // REF-ACR38x-CCID-6.05.pdf, 9.3.6.2.READ_MEMORY_CARD
     BYTE send_data[] = {0xFF, 0xB0, 0x00, address, len};
     ULONG send_len = sizeof(send_data);
-    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
     return rv;
 }
 
@@ -283,7 +308,7 @@ LONG sc_get_error_counter(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *rec
     // for SLE 4442 and SLE 5542 memory cards
     BYTE send_data[] = {0xFF, 0xB1, 0x00, 0x00, 0x04};
     ULONG send_len = sizeof(send_data);
-    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
     return rv;
 }
 
@@ -293,7 +318,7 @@ LONG sc_present_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULON
     // for SLE 4442 and SLE 5542 memory cards
     BYTE send_data[] = {0xFF, 0x20, 0x00, 0x00, 0x03, pin[0], pin[1], pin[2]};
     ULONG send_len = sizeof(send_data);
-    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
     return rv;
 }
 
@@ -303,7 +328,7 @@ LONG sc_change_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG
     // for SLE 4442 and SLE 5542 memory cards
     BYTE send_data[] = {0xFF, 0xD2, 0x00, 0x01, 0x03, pin[0], pin[1], pin[2]};
     ULONG send_len = sizeof(send_data);
-    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
     return rv;
 }
 
@@ -319,7 +344,7 @@ LONG sc_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len
     assert(len + 5 <= SC_BUFFER_MAXLEN);
     memcpy(&send_data[5], data, len);
     ULONG send_len = len + 5;
-    LONG rv = sc_do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
     return rv;
 }
 
@@ -446,14 +471,16 @@ static SCARDHANDLE worker_card = 0;
 #define SC_REQUEST_CHANGE_PIN          8
 #define SC_REQUEST_WRITE_CARD          9
 
-static ULONG l_req_id = 0;
-static ULONG l_req_id_handled = 0;
-static ULONG l_req = SC_REQUEST_NONE;
-static ULONG l_req_len = 0;
-static BYTE l_req_data[SC_REQUEST_MAXLEN] = {0};
+#define SC_REQUEST_IDENTIFY_CARD          100
+
+// static ULONG l_req_id = 0;
+// static ULONG l_req_id_handled = 0;
+static uint32_t worker_request = SC_REQUEST_NONE;
+// static ULONG l_req_len = 0;
+// static BYTE l_req_data[SC_REQUEST_MAXLEN] = {0};
 
 // decalarations
-static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE req_data, const ULONG req_len);
+// static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE req_data, const ULONG req_len);
 
 /**
  * Thread routine which executes card access requests. 
@@ -462,11 +489,11 @@ static ULONG sc_handle_request(const ULONG req_id, const ULONG req, const LPBYTE
  */
 static void *worker_thread_fnc(void *ptr)
 {
-    ULONG req;
-    ULONG req_id;
-    ULONG req_id_handled;
-    ULONG req_len;
-    BYTE req_data[SC_REQUEST_MAXLEN];
+    uint32_t request;
+    // ULONG req_id;
+    // ULONG req_id_handled;
+    // ULONG req_len;
+    // BYTE req_data[SC_REQUEST_MAXLEN];
 
     bool rv = create_context(&worker_context);
     DBG("created CONTEXT 0x%08lX\n", worker_context);
@@ -484,12 +511,12 @@ static void *worker_thread_fnc(void *ptr)
         // this thread can now handle new request
         
         // reset handled request ID
-        l_req_id_handled = 0;
+        // l_req_id_handled = 0;
         // make local copies of the new request data
-        req_id = l_req_id;
-        req = l_req;
-        req_len = l_req_len;
-        memcpy(req_data, l_req_data, l_req_len);
+        // req_id = l_req_id;
+        request = worker_request;
+        // req_len = l_req_len;
+        // memcpy(req_data, l_req_data, l_req_len);
         pthread_mutex_unlock(&worker_mutex);
         TRC("condition met!\n");
 
@@ -499,10 +526,14 @@ static void *worker_thread_fnc(void *ptr)
         }
 
         // invoke request handling function from this thread!
-        req_id_handled = sc_handle_request(req_id, req, req_data, req_len);
-        pthread_mutex_lock(&worker_mutex);
-        l_req_id_handled = req_id_handled; 
-        pthread_mutex_unlock(&worker_mutex);
+        // req_id_handled = sc_handle_request(req_id, req, req_data, req_len);
+        // pthread_mutex_lock(&worker_mutex);
+        // l_req_id_handled = req_id_handled; 
+        // pthread_mutex_unlock(&worker_mutex);
+
+        if (request == SC_REQUEST_IDENTIFY_CARD) {
+            process_identify();
+        }
 
         // XXX not calling any SCardGetStatusChange() in this thread
         // if the wait was cancelled (i.e. exiting the app), exit the thread!
@@ -558,109 +589,128 @@ static void worker_thread_stop()
 
 
 
-static void sc_card_request_dump()
-{
-    char buf[3*SC_REQUEST_MAXLEN] = {0};
-    int off = 0;
-    for (ULONG i = 0; i < l_req_len; i++) {
-        off += sprintf(buf + off, "%02X ", l_req_data[i]);
-    }
-    DBG("REQ ID %lu, REQ %ld, REQ_LEN %lu, REQ_DATA %s\n", l_req_id, l_req, l_req_len, buf);
-}
+// static void sc_card_request_dump()
+// {
+//     char buf[3*SC_REQUEST_MAXLEN] = {0};
+//     int off = 0;
+//     for (ULONG i = 0; i < l_req_len; i++) {
+//         off += sprintf(buf + off, "%02X ", l_req_data[i]);
+//     }
+//     DBG("REQ ID %lu, REQ %ld, REQ_LEN %lu, REQ_DATA %s\n", l_req_id, l_req, l_req_len, buf);
+// }
 
 // card request client (i.e. UI) interface
 
-static ULONG sc_request(const ULONG req, const LPBYTE req_data, const ULONG req_len)
+static void do_request(const uint32_t request)
 {
     TRC("Enter\n");
     pthread_mutex_lock(&worker_mutex);
     // save new card request
-    l_req = req;
-    l_req_len = req_len;
-    memcpy(l_req_data, req_data, req_len);
-    l_req_id++;
-    sc_card_request_dump();
+    worker_request = request;
+    // l_req_len = req_len;
+    // memcpy(l_req_data, req_data, req_len);
+    // l_req_id++;
+    // sc_card_request_dump();
     // signal waiting thread to handle the command
     pthread_cond_signal(&worker_condition);
     pthread_mutex_unlock(&worker_mutex);
 
-    TRC("Leave %lu\n", l_req_id);
-    return l_req_id;
+    // TRC("Leave %lu\n", l_req_id);
+    // return l_req_id;
 }
 
-bool sc_request_connect()
+static void request_identify()
 {
-    return sc_request(SC_REQUEST_CONNECT, NULL, 0);
+    do_request(SC_REQUEST_IDENTIFY_CARD);
 }
 
-bool sc_request_disconnect()
+static bool process_identify()
 {
-    return sc_request(SC_REQUEST_DISCONNECT, NULL, 0);
+    bool rv = false;
+    rv = connect_card(worker_context, &worker_card);
+    if (! rv) {
+        return false;
+    }
+
+    rv = get_reader_info(worker_card);
+    if (! rv) {
+        return false;
+    }
+    
+    return true;
 }
 
-bool sc_request_reader_info()
-{
-    return sc_request(SC_REQUEST_READER_INFO, NULL, 0);
-}
 
-bool sc_request_select_card()
-{
-    return sc_request(SC_REQUEST_SELECT_CARD, NULL, 0);
-}
 
-bool sc_request_read_card()
-{
-    BYTE data[2] = {0};
-    // read from user data start
-    data[0] = 64;
-    // read 16 bytes (4x 32-bit integers)
-    data[1] = 16;
-    return sc_request(SC_REQUEST_READ_CARD, data, 2);
-}
 
-bool sc_request_error_counter()
-{
-    return sc_request(SC_REQUEST_ERROR_COUNTER, NULL, 0);
-}
+// bool sc_request_connect()
+// {
+//     return sc_request(SC_REQUEST_CONNECT, NULL, 0);
+// }
 
-// FIXME: need to handle default pin (0xFF 0xFF 0xFF) presentation for blank cards!
-bool sc_request_present_pin()
-{
-    BYTE data[3] = {0};
-    // FIXME: do not hardcode PIN here!!!
-    // 3 pin bytes
-    data[0] = 0xC0;
-    data[1] = 0xDE;
-    data[2] = 0xA5;
-    return sc_request(SC_REQUEST_PRESENT_PIN, data, 3);
-}
+// bool sc_request_disconnect()
+// {
+//     return sc_request(SC_REQUEST_DISCONNECT, NULL, 0);
+// }
 
-bool sc_request_change_pin()
-{
-    BYTE data[3] = {0};
-    // FIXME: do not hardcode PIN here!!!
-    // 3 pin bytes
-    data[0] = 0xC0;
-    data[1] = 0xDE;
-    data[2] = 0xA5;
-    return sc_request(SC_REQUEST_CHANGE_PIN, data, 3);
-}
+// bool sc_request_reader_info()
+// {
+//     return sc_request(SC_REQUEST_READER_INFO, NULL, 0);
+// }
 
-bool sc_request_write_card()
-{
-    // FIXME: Where does data come from?
-    //        Just a stub for now..
-    return sc_request(SC_REQUEST_WRITE_CARD, NULL, 0);
-}
+// bool sc_request_select_card()
+// {
+//     return sc_request(SC_REQUEST_SELECT_CARD, NULL, 0);
+// }
+
+// bool sc_request_read_card()
+// {
+//     BYTE data[2] = {0};
+//     // read from user data start
+//     data[0] = 64;
+//     // read 16 bytes (4x 32-bit integers)
+//     data[1] = 16;
+//     return sc_request(SC_REQUEST_READ_CARD, data, 2);
+// }
+
+// bool sc_request_error_counter()
+// {
+//     return sc_request(SC_REQUEST_ERROR_COUNTER, NULL, 0);
+// }
+
+// // FIXME: need to handle default pin (0xFF 0xFF 0xFF) presentation for blank cards!
+// bool sc_request_present_pin()
+// {
+//     BYTE data[3] = {0};
+//     // FIXME: do not hardcode PIN here!!!
+//     // 3 pin bytes
+//     data[0] = 0xC0;
+//     data[1] = 0xDE;
+//     data[2] = 0xA5;
+//     return sc_request(SC_REQUEST_PRESENT_PIN, data, 3);
+// }
+
+// bool sc_request_change_pin()
+// {
+//     BYTE data[3] = {0};
+//     // FIXME: do not hardcode PIN here!!!
+//     // 3 pin bytes
+//     data[0] = 0xC0;
+//     data[1] = 0xDE;
+//     data[2] = 0xA5;
+//     return sc_request(SC_REQUEST_CHANGE_PIN, data, 3);
+// }
+
+// bool sc_request_write_card()
+// {
+//     // FIXME: Where does data come from?
+//     //        Just a stub for now..
+//     return sc_request(SC_REQUEST_WRITE_CARD, NULL, 0);
+// }
 
 
 // card request handlers
-
-bool sc_is_card_connected()
-{
-    return (worker_card != 0) ? true : false;
-}
-
+#if 0
 static void sc_handle_request_connect()
 {
     // only connect to card if not already connected
@@ -707,7 +757,7 @@ static void sc_handle_request_reader_info()
     DBG("selected card 0x%02X\n", card_sel);
     BYTE card_stat = recv_data[15];
     DBG("card status %d\n", card_stat);
-    rv = sc_check_sw(sw_data, 0x90, 0x00);
+    rv = check_sw(sw_data, 0x90, 0x00);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -725,7 +775,7 @@ static void sc_handle_request_select_card()
     }
     // response is 0 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.1. SELECT_CARD_TYPE
     assert(recv_len == 0);
-    rv = sc_check_sw(sw_data, 0x90, 0x00);
+    rv = check_sw(sw_data, 0x90, 0x00);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -753,7 +803,7 @@ static void sc_handle_request_read_card(const LPBYTE req_data, const ULONG req_l
     DBG("CARD ID: %lu\n", id);
     DBG("TOTAL: %lu\n", total);
     DBG("VALUE: %lu\n", value);
-    rv = sc_check_sw(sw_data, 0x90, 0x00);
+    rv = check_sw(sw_data, 0x90, 0x00);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -777,7 +827,7 @@ static void sc_handle_request_error_counter()
     //                0x03 and 0x01 indicate failed verification
     //                0x00          indicates locked card (no retries left)
     DBG("ERROR COUNTER: %u\n", counter);
-    rv = sc_check_sw(sw_data, 0x90, 0x00);
+    rv = check_sw(sw_data, 0x90, 0x00);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -802,7 +852,7 @@ static void sc_handle_request_present_pin(const LPBYTE req_data, const ULONG req
     //                0x03 and 0x01 indicate failed verification
     //                0x00          indicates locked card (no retries left)
     DBG("ERROR COUNTER: %u\n", counter);
-    rv = sc_check_sw(sw_data, 0x90, 0x07);
+    rv = check_sw(sw_data, 0x90, 0x07);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -821,7 +871,7 @@ static void sc_handle_request_change_pin(const LPBYTE req_data, const ULONG req_
     }
     // response is 0 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.8. CHANGE_CODE_MEMORY_CARD
     assert(recv_len == 0);
-    rv = sc_check_sw(sw_data, 0x90, 0x00);
+    rv = check_sw(sw_data, 0x90, 0x00);
     if (rv != SCARD_S_SUCCESS) {
         return;
     }
@@ -842,7 +892,7 @@ static void sc_handle_request_write_card(const LPBYTE req_data, const ULONG req_
     // }
     // // response is 0 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.5. WRITE_MEMORY_CARD
     // assert(recv_len == 0);
-    // rv = sc_check_sw(sw_data, 0x90, 0x00);
+    // rv = check_sw(sw_data, 0x90, 0x00);
     // if (rv != SCARD_S_SUCCESS) {
     //     return;
     // }
@@ -896,6 +946,8 @@ bool sc_is_request_handled()
 }
 
 
+#endif
+
 
 /**
  * exported user API
@@ -934,22 +986,21 @@ bool sc_is_card_inserted()
     return card_presence();
 }
 
+bool sc_is_card_connected()
+{
+    return (worker_card != 0) ? true : false;
+}
+
 char *sc_get_reader_name()
 {
     return reader_name();
 }
 
-bool sc_identify_card()
+void sc_identify_card()
 {
     TRC("Enter\n")
 
-    bool rv = false;
-    rv = connect_card(worker_context, &worker_card);
-    if (! rv) {
-        return false;
-    }
-
-    return true;
+    request_identify();
 }
 
 void sc_forget_card()

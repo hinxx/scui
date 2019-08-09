@@ -62,37 +62,40 @@
     }
 
 #define SC_BUFFER_MAXLEN              256
+#define SC_MAX_READERNAME_LEN           128
+#define SC_MAX_REQUEST_LEN              255
+#define SC_MAX_FIRMWARE_LEN             10
 
 struct state {
     // global
-    bool error;
+    // bool error;
 
     // reader
-    bool reader_attached;
-    char reader_name[MAX_READERNAME+1];
-    char reader_firmware[MAX_READERNAME+1];
+    // bool reader_attached;
+    char reader_name[SC_MAX_READERNAME_LEN+1];
+    char reader_firmware[SC_MAX_FIRMWARE_LEN+1];
     uint8_t reader_max_send;
     uint8_t reader_max_recv;
     uint16_t reader_card_types;
     uint8_t reader_selected_card;
     uint8_t reader_card_status;
-    uint32_t reader_state;
+    // uint32_t reader_state;
 
     // card
-    bool card_inserted;
-    bool card_connected;
-    bool card_selected;
-    bool card_personalized;
-    bool card_unlocked;
-    bool card_identified;
-    uint8_t card_error_counter;
-    PSCARD_IO_REQUEST card_protocol;
+    // bool card_inserted;
+    // bool card_connected;
+    // bool card_selected;
+    // bool card_personalized;
+    // bool card_unlocked;
+    // bool card_identified;
+    // uint8_t card_error_counter;
+    // PSCARD_IO_REQUEST card_protocol;
 
     // user
-    uint32_t user_magic;
-    uint32_t user_id;
-    uint32_t user_total;
-    uint32_t user_value;
+    // uint32_t user_magic;
+    // uint32_t user_id;
+    // uint32_t user_total;
+    // uint32_t user_value;
 };
 
 // LONG sc_create_context(PSCARDCONTEXT context);
@@ -110,13 +113,17 @@ struct state {
 // void sc_disconnect_card(PSCARDHANDLE handle);
 // bool sc_is_card_connected();
 // void sc_to_hex(LPBYTE data, ULONG len);
-LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG send_len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
-LONG sc_check_sw(const LPBYTE sw_data, const BYTE sw1, const BYTE sw2);
-LONG sc_get_reader_info(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
-LONG sc_select_memory_card(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
-LONG sc_read_card(const SCARDHANDLE handle, BYTE address, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
-LONG sc_get_error_counter(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
-LONG sc_present_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
-LONG sc_change_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+// LONG sc_do_xfer(const SCARDHANDLE handle, const LPBYTE send_data, const ULONG send_len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+// LONG sc_check_sw(const LPBYTE sw_data, const BYTE sw1, const BYTE sw2);
+// LONG sc_get_reader_info(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+// LONG sc_select_memory_card(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+// LONG sc_read_card(const SCARDHANDLE handle, BYTE address, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+// LONG sc_get_error_counter(const SCARDHANDLE handle, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+// LONG sc_present_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+// LONG sc_change_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data);
+
+
+
+static bool process_identify();
 
 #endif // SC_INTERNAL_H_
