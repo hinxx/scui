@@ -554,20 +554,21 @@ static pthread_mutex_t worker_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t worker_condition = PTHREAD_COND_INITIALIZER;
 static SCARDHANDLE worker_card = 0;
 
-#define SC_REQUEST_MAXLEN              128
+// #define SC_REQUEST_MAXLEN              128
 
 #define SC_REQUEST_NONE                0
-#define SC_REQUEST_CONNECT             1
-#define SC_REQUEST_DISCONNECT          2
-#define SC_REQUEST_READER_INFO         3
-#define SC_REQUEST_SELECT_CARD         4
-#define SC_REQUEST_READ_CARD           5
-#define SC_REQUEST_ERROR_COUNTER       6
-#define SC_REQUEST_PRESENT_PIN         7
-#define SC_REQUEST_CHANGE_PIN          8
-#define SC_REQUEST_WRITE_CARD          9
+// #define SC_REQUEST_CONNECT             1
+// #define SC_REQUEST_DISCONNECT          2
+// #define SC_REQUEST_READER_INFO         3
+// #define SC_REQUEST_SELECT_CARD         4
+// #define SC_REQUEST_READ_CARD           5
+// #define SC_REQUEST_ERROR_COUNTER       6
+// #define SC_REQUEST_PRESENT_PIN         7
+// #define SC_REQUEST_CHANGE_PIN          8
+// #define SC_REQUEST_WRITE_CARD          9
 
 #define SC_REQUEST_IDENTIFY_CARD          100
+#define SC_REQUEST_UPDATE_CARD            200
 
 // static ULONG l_req_id = 0;
 // static ULONG l_req_id_handled = 0;
@@ -629,6 +630,8 @@ static void *worker_thread_fnc(void *ptr)
 
         if (request == SC_REQUEST_IDENTIFY_CARD) {
             process_identify();
+        } else if (request == SC_REQUEST_UPDATE_CARD) {
+            process_update();
         }
 
         // XXX not calling any SCardGetStatusChange() in this thread
@@ -708,9 +711,15 @@ static void request_identify()
     do_request(SC_REQUEST_IDENTIFY_CARD);
 }
 
+static void request_update()
+{
+    do_request(SC_REQUEST_UPDATE_CARD);
+}
+
 static bool process_identify()
 {
     bool rv = false;
+
     rv = connect_card(worker_context, &worker_card);
     if (! rv) {
         return false;
@@ -743,18 +752,20 @@ static bool process_identify()
     return true;
 }
 
+static bool process_update()
+{
+    bool rv = false;
+
+    rv = get_error_counter(worker_card);
+    if (! rv) {
+        return false;
+    }
+
+    return rv;
+}
 
 
 
-// bool sc_request_read_card()
-// {
-//     BYTE data[2] = {0};
-//     // read from user data start
-//     data[0] = 64;
-//     // read 16 bytes (4x 32-bit integers)
-//     data[1] = 16;
-//     return sc_request(SC_REQUEST_READ_CARD, data, 2);
-// }
 
 // // FIXME: need to handle default pin (0xFF 0xFF 0xFF) presentation for blank cards!
 // bool sc_request_present_pin()
@@ -791,34 +802,6 @@ static bool process_identify()
 
 
 #if 0
-
-static void sc_handle_request_read_card(const LPBYTE req_data, const ULONG req_len)
-{
-    BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
-    ULONG recv_len = SC_BUFFER_MAXLEN - 2;
-    BYTE sw_data[2] = {0};
-    assert(worker_card != 0);
-    assert(req_len == 2);
-    LONG rv = sc_read_card(worker_card, req_data[0], req_data[1], recv_data, &recv_len, sw_data);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-    // response is req_data[1] bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.2.READ_MEMORY_CARD
-    assert(recv_len == req_data[1]);
-    // to_hex(recv_data, recv_len);
-    ULONG magic = (recv_data[3] << 24  | recv_data[2] << 16  | recv_data[1] << 8  | recv_data[0]);
-    ULONG id    = (recv_data[7] << 24  | recv_data[6] << 16  | recv_data[5] << 8  | recv_data[4]);
-    ULONG total = (recv_data[11] << 24 | recv_data[10] << 16 | recv_data[9] << 8  | recv_data[8]);
-    ULONG value = (recv_data[15] << 24 | recv_data[14] << 16 | recv_data[13] << 8 | recv_data[12]);
-    DBG("MAGIC: %lu\n", magic);
-    DBG("CARD ID: %lu\n", id);
-    DBG("TOTAL: %lu\n", total);
-    DBG("VALUE: %lu\n", value);
-    rv = check_sw(sw_data, 0x90, 0x00);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-}
 
 static void sc_handle_request_present_pin(const LPBYTE req_data, const ULONG req_len)
 {
@@ -938,7 +921,6 @@ char *sc_get_reader_name()
 void sc_identify_card()
 {
     TRC("Enter\n")
-
     request_identify();
 }
 
@@ -948,10 +930,19 @@ void sc_forget_card()
     disconnect_card(&worker_card);
 }
 
-void sc_user_data(uint32_t *magic, uint32_t *id, uint32_t *value, uint32_t *total)
+void sc_get_user_data(uint32_t *magic, uint32_t *id, uint32_t *value, uint32_t *total)
 {
+    // TRC("Enter\n")
     *magic = g_state.user_magic;
     *id = g_state.user_id;
     *value = g_state.user_value;
     *total = g_state.user_total;
+}
+
+void sc_set_user_data(uint8_t new_value)
+{
+    TRC("Enter\n")
+    g_state.user_add_value = new_value;
+    DBG("User wants to add %d E to the card\n", g_state.user_add_value);
+    request_update();
 }

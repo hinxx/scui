@@ -128,6 +128,9 @@ int main(int, char**)
     uint32_t id = 0;
     uint32_t value = 0;
     uint32_t total = 0;
+    // uint32_t new_value = 2;
+    static ImU8 new_value = 2;
+    const ImU8 u8_one = 1;
 
     // ULONG req_id = 0;
     // SCard initialize
@@ -171,13 +174,25 @@ int main(int, char**)
                 sc_identify_card();
                 identify_card = false;
             }
-
-            sc_user_data(&magic, &id, &value, &total);
+            // XXX: Call this only once after the card is identfied?
+            //      Need to wait for the identify request to finish first!!!
+            sc_get_user_data(&magic, &id, &value, &total);
             ImGui::Text("User info:");
             ImGui::Text(" Magic: %d", magic);
             ImGui::Text("    ID: %d", id);
             ImGui::Text(" Value: %d", value);
             ImGui::Text(" Total: %d", total);
+
+            // ImGui::InputInt("New value", (int *)&new_value);
+            // ImGui::SameLine(); HelpMarker("You can apply arithmetic operators +,*,/ on numerical values.\n  e.g. [ 100 ], input \'*2\', result becomes [ 200 ]\nUse +- to subtract.\n");
+            // ImGui::InputScalar("New value", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
+            ImGui::Text("New value:");
+            ImGui::SameLine();
+            ImGui::InputScalar("", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
+            // ImGui::SameLine();
+            if (ImGui::Button("Update card")) {
+                sc_set_user_data(new_value);
+            }
 
 /*
             if (ImGui::Button("Card connect")) {
@@ -226,6 +241,7 @@ int main(int, char**)
             if (! (have_card && have_reader) && connected_card) {
                 // req_id = sc_request_disconnect();
                 sc_forget_card();
+                new_value = 2;
             }
 
             ImGui::End();            

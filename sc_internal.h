@@ -96,6 +96,8 @@ struct state {
     uint32_t user_id;
     uint32_t user_total;
     uint32_t user_value;
+
+    uint32_t user_add_value;
 };
 
 // LONG sc_create_context(PSCARDCONTEXT context);
@@ -125,5 +127,6 @@ struct state {
 
 
 static bool process_identify();
+static bool process_update();
 
 #endif // SC_INTERNAL_H_
