@@ -420,8 +420,6 @@ static bool change_pin(const SCARDHANDLE handle, LPBYTE pin)
     // for SLE 4442 and SLE 5542 memory cards
     BYTE send_data[] = {0xFF, 0xD2, 0x00, 0x01, 0x03, pin[0], pin[1], pin[2]};
     ULONG send_len = sizeof(send_data);
-    // LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
-    // return rv;
     BYTE recv_data[SC_MAX_REQUEST_LEN+1] = {0};
     ULONG recv_len = sizeof(recv_data);
     BYTE sw_data[2+1] = {0};
@@ -440,7 +438,7 @@ static bool change_pin(const SCARDHANDLE handle, LPBYTE pin)
     return true;
 }
 
-LONG sc_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+static bool write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len)
 {
     // REF-ACR38x-CCID-6.05.pdf, 9.3.6.5. WRITE_MEMORY_CARD
     BYTE send_data[SC_MAX_REQUEST_LEN+1];
@@ -452,8 +450,23 @@ LONG sc_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len
     assert(len + 5 <= SC_MAX_REQUEST_LEN);
     memcpy(&send_data[5], data, len);
     ULONG send_len = len + 5;
-    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
-    return rv;
+    // LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    // return rv;
+    BYTE recv_data[SC_MAX_REQUEST_LEN+1] = {0};
+    ULONG recv_len = sizeof(recv_data);
+    BYTE sw_data[2+1] = {0};
+    bool rv = do_xfer(handle, send_data, send_len, recv_data, &recv_len, sw_data);
+    if (! rv) {
+        return false;
+    }
+    // success is 90 00
+    rv = check_sw(sw_data, 0x90, 0x00);
+    if (! rv) {
+        return false;
+    }
+    // response is 0 bytes long
+    assert(recv_len == 0);
+    return true;
 }
 
 
@@ -854,36 +867,52 @@ static bool process_update()
                 return false;
             }
         }
+
+        uint32_t value = 0;
+        // if user ID is NOT admin, then we are working with user card
+        if (g_state.user_id != SC_ADMIN_ID) {
+            // add new value to remaining user value
+            value = g_state.user_value + g_state.user_add_value;
+            // make sure user ID is always the same
+            g_state.user_id = SC_USER_ID;
+        }
+        // set value and total to be equal
+        g_state.user_value = value;
+        g_state.user_total = value;
+        // always use latest magic value!
+        g_state.user_magic = SC_MAGIC_VALUE;
+
+        // read from user data start
+        BYTE address = 64;
+        // read 16 bytes (4x 32-bit integers)
+        BYTE length = 16;
+        // data, 4x 32-bit integer: magic, ID, total, value
+        BYTE data[16] = {0};
+        data[0] =  (BYTE)(g_state.user_magic         & 0xFF);
+        data[1] =  (BYTE)((g_state.user_magic >> 8)  & 0xFF);
+        data[2] =  (BYTE)((g_state.user_magic >> 16) & 0xFF);
+        data[3] =  (BYTE)((g_state.user_magic >> 24) & 0xFF);
+        data[4] =  (BYTE)(g_state.user_id            & 0xFF);
+        data[5] =  (BYTE)((g_state.user_id    >> 8)  & 0xFF);
+        data[6] =  (BYTE)((g_state.user_id    >> 16) & 0xFF);
+        data[7] =  (BYTE)((g_state.user_id    >> 24) & 0xFF);
+        data[8] =  (BYTE)(g_state.user_total         & 0xFF);
+        data[9] =  (BYTE)((g_state.user_total >> 8)  & 0xFF);
+        data[10] = (BYTE)((g_state.user_total >> 16) & 0xFF);
+        data[11] = (BYTE)((g_state.user_total >> 24) & 0xFF);
+        data[12] = (BYTE)(g_state.user_value         & 0xFF);
+        data[13] = (BYTE)((g_state.user_value >> 8)  & 0xFF);
+        data[14] = (BYTE)((g_state.user_value >> 16) & 0xFF);
+        data[15] = (BYTE)((g_state.user_value >> 24) & 0xFF);
+        rv = write_card(worker_card, address, data, length);
+        if (! rv) {
+            return false;
+        }
+        DBG("Card updated, new value/total %u!\n", g_state.user_value);
     }
 
-    return rv;
+    return true;
 }
-
-#if 0
-
-// FIXME: untested!
-//        Just a stub for now..
-static void sc_handle_request_write_card(const LPBYTE req_data, const ULONG req_len)
-{
-    ERR("Not implemented!\n");
-    // BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
-    // ULONG recv_len = SC_BUFFER_MAXLEN - 2;
-    // BYTE sw_data[2] = {0};
-    // assert(worker_card != 0);
-    // LONG rv = sc_write_card(worker_card, req_data, recv_data, &recv_len, sw_data);
-    // if (rv != SCARD_S_SUCCESS) {
-    //     return;
-    // }
-    // // response is 0 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.5. WRITE_MEMORY_CARD
-    // assert(recv_len == 0);
-    // rv = check_sw(sw_data, 0x90, 0x00);
-    // if (rv != SCARD_S_SUCCESS) {
-    //     return;
-    // }
-}
-
-#endif
-
 
 /**
  * exported user API
