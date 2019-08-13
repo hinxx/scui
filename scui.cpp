@@ -341,12 +341,16 @@ static bool get_error_counter(const SCARDHANDLE handle)
     assert(recv_len == 4);
     pthread_mutex_lock(&g_state_mutex);
     g_state.card_pin_retries = recv_data[0];
+    g_state.card_pin_code[0] = recv_data[1];
+    g_state.card_pin_code[1] = recv_data[2];
+    g_state.card_pin_code[2] = recv_data[3];
     pthread_mutex_unlock(&g_state_mutex);
     // counter value: 0x07          indicates success,
     //                0x03 and 0x01 indicate failed verification
     //                0x00          indicates locked card (no retries left)
     DBG("PIN retries left (should be 7!!): %u\n", g_state.card_pin_retries);
-    DBG("PIN bytes (valid after present): %02X %02X %02X\n", recv_data[1], recv_data[2], recv_data[3]);
+    DBG("PIN bytes (valid after present): %02X %02X %02X\n", g_state.card_pin_code[0],
+        g_state.card_pin_code[1], g_state.card_pin_code[2]);
     return true;
 }
 
@@ -380,13 +384,33 @@ static bool read_user_data(const SCARDHANDLE handle, BYTE address, BYTE len)
     return true;
 }
 
-LONG sc_present_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+static bool present_pin(const SCARDHANDLE handle, LPBYTE pin)
 {
     // REF-ACR38x-CCID-6.05.pdf, 9.3.6.7. PRESENT_CODE_MEMORY_CARD
     // for SLE 4442 and SLE 5542 memory cards
     BYTE send_data[] = {0xFF, 0x20, 0x00, 0x00, 0x03, pin[0], pin[1], pin[2]};
     ULONG send_len = sizeof(send_data);
-    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    BYTE recv_data[SC_MAX_REQUEST_LEN+1] = {0};
+    ULONG recv_len = sizeof(recv_data);
+    BYTE sw_data[2+1] = {0};
+    bool rv = do_xfer(handle, send_data, send_len, recv_data, &recv_len, sw_data);
+    if (! rv) {
+        return false;
+    }
+    // success is 90 07
+    rv = check_sw(sw_data, 0x90, 0x07);
+    if (! rv) {
+        return false;
+    }
+    // response is 0 bytes long
+    assert(recv_len == 0);
+    pthread_mutex_lock(&g_state_mutex);
+    g_state.card_pin_retries = sw_data[1];
+    pthread_mutex_unlock(&g_state_mutex);
+    // counter value: 0x07          indicates success,
+    //                0x03 and 0x01 indicate failed verification
+    //                0x00          indicates locked card (no retries left)
+    DBG("PIN retries left (should be 7!!): %u\n", g_state.card_pin_retries);
     return rv;
 }
 
@@ -749,7 +773,7 @@ static bool process_identify()
         return false;
     }
 
-    return true;
+    return rv;
 }
 
 static bool process_update()
@@ -759,6 +783,55 @@ static bool process_update()
     rv = get_error_counter(worker_card);
     if (! rv) {
         return false;
+    }
+
+    // blank card has all bytes set to 0xFF, check user magic
+    if (g_state.user_magic == 0xFFFFFFFF) {
+        DBG("user magic is not set yet, need to present default PIN..\n");
+        BYTE pin[3] = {0};
+        // use default PIN here!!!
+        // 3 pin bytes
+        pin[0] = 0xFF;
+        pin[1] = 0xFF;
+        pin[2] = 0xFF;
+        rv = present_pin(worker_card, pin);
+        if (! rv) {
+            return false;
+        }
+
+        rv = get_error_counter(worker_card);
+        if (! rv) {
+            return false;
+        }
+
+        // TODO
+        // change PIN
+        // write ID, magic, value & total 0
+
+    } else {
+        DBG("user magic is set, need to present our PIN..\n");
+        // before PIN is presented, returned PIN code from error check
+        // is 0x00 0x00 0x00, afterwards is our PIN code; present code 
+        // only once.
+        if (! ((g_state.card_pin_code[0] == SC_PIN_CODE_BYTE_1)
+            && (g_state.card_pin_code[1] == SC_PIN_CODE_BYTE_2)
+            && (g_state.card_pin_code[2] == SC_PIN_CODE_BYTE_3))) {
+            BYTE pin[3] = {0};
+            // use our PIN here!!!
+            // 3 pin bytes
+            pin[0] = SC_PIN_CODE_BYTE_1;
+            pin[1] = SC_PIN_CODE_BYTE_2;
+            pin[2] = SC_PIN_CODE_BYTE_3;
+            rv = present_pin(worker_card, pin);
+            if (! rv) {
+                return false;
+            }
+
+            rv = get_error_counter(worker_card);
+            if (! rv) {
+                return false;
+            }
+        }
     }
 
     return rv;

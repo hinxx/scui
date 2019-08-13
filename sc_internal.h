@@ -66,6 +66,10 @@
 #define SC_MAX_REQUEST_LEN              255
 #define SC_MAX_FIRMWARE_LEN             10
 
+#define SC_PIN_CODE_BYTE_1              0xC0
+#define SC_PIN_CODE_BYTE_2              0xDE
+#define SC_PIN_CODE_BYTE_3              0xA5
+
 struct state {
     // global
     // bool error;
@@ -90,6 +94,7 @@ struct state {
     // bool card_identified;
     BYTE card_pin_retries;
     PSCARD_IO_REQUEST card_protocol;
+    BYTE card_pin_code[3];
 
     // user
     uint32_t user_magic;
