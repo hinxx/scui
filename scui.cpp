@@ -411,17 +411,33 @@ static bool present_pin(const SCARDHANDLE handle, LPBYTE pin)
     //                0x03 and 0x01 indicate failed verification
     //                0x00          indicates locked card (no retries left)
     DBG("PIN retries left (should be 7!!): %u\n", g_state.card_pin_retries);
-    return rv;
+    return true;
 }
 
-LONG sc_change_pin(const SCARDHANDLE handle, LPBYTE pin, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
+static bool change_pin(const SCARDHANDLE handle, LPBYTE pin)
 {
     // REF-ACR38x-CCID-6.05.pdf, 9.3.6.8. CHANGE_CODE_MEMORY_CARD
     // for SLE 4442 and SLE 5542 memory cards
     BYTE send_data[] = {0xFF, 0xD2, 0x00, 0x01, 0x03, pin[0], pin[1], pin[2]};
     ULONG send_len = sizeof(send_data);
-    LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
-    return rv;
+    // LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
+    // return rv;
+    BYTE recv_data[SC_MAX_REQUEST_LEN+1] = {0};
+    ULONG recv_len = sizeof(recv_data);
+    BYTE sw_data[2+1] = {0};
+    bool rv = do_xfer(handle, send_data, send_len, recv_data, &recv_len, sw_data);
+    if (! rv) {
+        return false;
+    }
+    // success is 90 00
+    rv = check_sw(sw_data, 0x90, 0x00);
+    if (! rv) {
+        return false;
+    }
+    // response is 0 bytes long
+    assert(recv_len == 0);
+    DBG("PIN changed!\n");
+    return true;
 }
 
 LONG sc_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len, LPBYTE recv_data, ULONG *recv_len, LPBYTE sw_data)
@@ -790,7 +806,6 @@ static bool process_update()
         DBG("user magic is not set yet, need to present default PIN..\n");
         BYTE pin[3] = {0};
         // use default PIN here!!!
-        // 3 pin bytes
         pin[0] = 0xFF;
         pin[1] = 0xFF;
         pin[2] = 0xFF;
@@ -804,8 +819,16 @@ static bool process_update()
             return false;
         }
 
+        // use our PIN here!!!
+        pin[0] = SC_PIN_CODE_BYTE_1;
+        pin[1] = SC_PIN_CODE_BYTE_2;
+        pin[2] = SC_PIN_CODE_BYTE_3;
+        rv = change_pin(worker_card, pin);
+        if (! rv) {
+            return false;
+        }
+
         // TODO
-        // change PIN
         // write ID, magic, value & total 0
 
     } else {
@@ -818,7 +841,6 @@ static bool process_update()
             && (g_state.card_pin_code[2] == SC_PIN_CODE_BYTE_3))) {
             BYTE pin[3] = {0};
             // use our PIN here!!!
-            // 3 pin bytes
             pin[0] = SC_PIN_CODE_BYTE_1;
             pin[1] = SC_PIN_CODE_BYTE_2;
             pin[2] = SC_PIN_CODE_BYTE_3;
@@ -837,88 +859,7 @@ static bool process_update()
     return rv;
 }
 
-
-
-
-// // FIXME: need to handle default pin (0xFF 0xFF 0xFF) presentation for blank cards!
-// bool sc_request_present_pin()
-// {
-//     BYTE data[3] = {0};
-//     // FIXME: do not hardcode PIN here!!!
-//     // 3 pin bytes
-//     data[0] = 0xC0;
-//     data[1] = 0xDE;
-//     data[2] = 0xA5;
-//     return sc_request(SC_REQUEST_PRESENT_PIN, data, 3);
-// }
-
-// bool sc_request_change_pin()
-// {
-//     BYTE data[3] = {0};
-//     // FIXME: do not hardcode PIN here!!!
-//     // 3 pin bytes
-//     data[0] = 0xC0;
-//     data[1] = 0xDE;
-//     data[2] = 0xA5;
-//     return sc_request(SC_REQUEST_CHANGE_PIN, data, 3);
-// }
-
-// bool sc_request_write_card()
-// {
-//     // FIXME: Where does data come from?
-//     //        Just a stub for now..
-//     return sc_request(SC_REQUEST_WRITE_CARD, NULL, 0);
-// }
-
-
-// card request handlers
-
-
 #if 0
-
-static void sc_handle_request_present_pin(const LPBYTE req_data, const ULONG req_len)
-{
-    BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
-    ULONG recv_len = SC_BUFFER_MAXLEN - 2;
-    BYTE sw_data[2] = {0};
-    assert(worker_card != 0);
-    assert(req_len == 3);
-    LONG rv = sc_present_pin(worker_card, req_data, recv_data, &recv_len, sw_data);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-    // response is 0 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.7. PRESENT_CODE_MEMORY_CARD
-    assert(recv_len == 0);
-    // to_hex(sw_data, 2);
-    BYTE counter = sw_data[1];
-    // counter value: 0x07          indicates success,
-    //                0x03 and 0x01 indicate failed verification
-    //                0x00          indicates locked card (no retries left)
-    DBG("ERROR COUNTER: %u\n", counter);
-    rv = check_sw(sw_data, 0x90, 0x07);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-}
-
-static void sc_handle_request_change_pin(const LPBYTE req_data, const ULONG req_len)
-{
-    BYTE recv_data[SC_BUFFER_MAXLEN] = {0};
-    ULONG recv_len = SC_BUFFER_MAXLEN - 2;
-    BYTE sw_data[2] = {0};
-    assert(worker_card != 0);
-    assert(req_len == 3);
-    LONG rv = sc_change_pin(worker_card, req_data, recv_data, &recv_len, sw_data);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-    // response is 0 bytes long, see REF-ACR38x-CCID-6.05.pdf, 9.3.6.8. CHANGE_CODE_MEMORY_CARD
-    assert(recv_len == 0);
-    rv = check_sw(sw_data, 0x90, 0x00);
-    if (rv != SCARD_S_SUCCESS) {
-        return;
-    }
-}
 
 // FIXME: untested!
 //        Just a stub for now..
