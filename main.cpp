@@ -31,7 +31,8 @@
 #endif
 
 // SCard API
-#include "scui.h"
+//#include "scui.h"
+#include "fsm.h"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -119,7 +120,7 @@ int main(int, char**)
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
+/*
     bool have_reader = false;
     bool have_card = false;
     bool connected_card = false;
@@ -137,6 +138,8 @@ int main(int, char**)
     // ULONG req_id = 0;
     // SCard initialize
     sc_init();
+*/
+    fsm_thread_start();
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -157,6 +160,15 @@ int main(int, char**)
         {
             ImGui::Begin("Sole Card UI 0.0.1");
 
+            ImGui::Text("Foo text..");
+
+            if (ImGui::Button("User action")) {
+                // request FSM state to update the card..
+            }
+
+            ImGui::Text("Bar text..");
+
+/*
             // if (! have_reader && sc_is_reader_attached()) {
             //     identify_card = true;
             // }
@@ -204,44 +216,6 @@ int main(int, char**)
                 sc_set_user_data(card_type == 2, (uint32_t)new_value);
             }
 
-/*
-            if (ImGui::Button("Card connect")) {
-                req_id = sc_request_connect();
-            }
-
-            if (ImGui::Button("Card disconnect")) {
-                req_id = sc_request_disconnect();
-            }
-
-            if (ImGui::Button("Get reader info")) {
-                req_id = sc_request_reader_info();
-            }
-
-            if (ImGui::Button("Select memory card")) {
-                req_id = sc_request_select_card();
-            }
-
-            if (ImGui::Button("Read memory card")) {
-                req_id = sc_request_read_card();
-            }
-
-            if (ImGui::Button("Read error counter")) {
-                req_id = sc_request_error_counter();
-            }
-
-            if (ImGui::Button("Present PIN")) {
-                req_id = sc_request_present_pin();
-            }
-
-            if (ImGui::Button("Change PIN")) {
-                req_id = sc_request_change_pin();
-            }
-
-            if (ImGui::Button("Write memory card")) {
-                req_id = sc_request_write_card();
-            }
-*/
-
             // ImGui::Text("Req ID: %lu", req_id);
 
             // handled_req_id = sc_handled_request();
@@ -253,7 +227,7 @@ int main(int, char**)
                 sc_forget_card();
                 new_value = 2;
             }
-
+*/
             ImGui::End();            
         }
 
@@ -305,9 +279,11 @@ int main(int, char**)
 
         glfwSwapBuffers(window);
     }
-
+/*
     // SCard destroy
     sc_destroy();
+*/
+    fsm_thread_stop();
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
