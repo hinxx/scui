@@ -69,7 +69,7 @@
 #define SC_MAGIC_VALUE                  6970
 
 #define SC_ADMIN_ID                     1
-#define SC_USER_ID                      9999
+#define SC_REGULAR_ID                   9999
 
 #define SC_PIN_CODE_BYTE_1              0xC0
 #define SC_PIN_CODE_BYTE_2              0xDE
@@ -108,6 +108,7 @@ struct state {
     uint32_t user_value;
 
     uint32_t user_add_value;
+    bool user_admin_card;
 };
 
 // LONG sc_create_context(PSCARDCONTEXT context);

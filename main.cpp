@@ -131,6 +131,8 @@ int main(int, char**)
     // uint32_t new_value = 2;
     static ImU8 new_value = 2;
     const ImU8 u8_one = 1;
+    // static bool admin_card = false;
+    static int card_type = 0;
 
     // ULONG req_id = 0;
     // SCard initialize
@@ -186,12 +188,20 @@ int main(int, char**)
             // ImGui::InputInt("New value", (int *)&new_value);
             // ImGui::SameLine(); HelpMarker("You can apply arithmetic operators +,*,/ on numerical values.\n  e.g. [ 100 ], input \'*2\', result becomes [ 200 ]\nUse +- to subtract.\n");
             // ImGui::InputScalar("New value", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
-            ImGui::Text("New value:");
-            ImGui::SameLine();
-            ImGui::InputScalar("", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
+            // ImGui::Checkbox("Create admin card?", &admin_card);
+            ImGui::Text("Card type:"); ImGui::SameLine();
+            ImGui::RadioButton("Regular", &card_type, 1); ImGui::SameLine();
+            ImGui::RadioButton("Admin", &card_type, 2);
+            // ImGui::RadioButton("radio b", &card_type, 1); ImGui::SameLine();
+            // ImGui::RadioButton("radio c", &card_type, 2);
+            if (card_type == 1) {
+                ImGui::Text("New value:");
+                ImGui::SameLine();
+                ImGui::InputScalar("", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
+            }
             // ImGui::SameLine();
             if (ImGui::Button("Update card")) {
-                sc_set_user_data(new_value);
+                sc_set_user_data(card_type == 2, (uint32_t)new_value);
             }
 
 /*
