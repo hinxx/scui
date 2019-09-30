@@ -869,12 +869,15 @@ static bool process_update()
         }
 
         uint32_t value = 0;
-        // if user ID is NOT admin, then we are working with user card
-        if (g_state.user_id != SC_ADMIN_ID) {
+        // what type of card is requested?
+        if (g_state.user_admin_card) {
+            // set admin ID
+            g_state.user_id = SC_ADMIN_ID;
+        } else {
+            // set regular ID
+            g_state.user_id = SC_REGULAR_ID;
             // add new value to remaining user value
             value = g_state.user_value + g_state.user_add_value;
-            // make sure user ID is always the same
-            g_state.user_id = SC_USER_ID;
         }
         // set value and total to be equal
         g_state.user_value = value;
@@ -886,7 +889,7 @@ static bool process_update()
         BYTE address = 64;
         // read 16 bytes (4x 32-bit integers)
         BYTE length = 16;
-        // data, 4x 32-bit integer: magic, ID, total, value
+        // data, 4x 32-bit integer in order: magic, ID, total, value
         BYTE data[16] = {0};
         data[0] =  (BYTE)(g_state.user_magic         & 0xFF);
         data[1] =  (BYTE)((g_state.user_magic >> 8)  & 0xFF);
@@ -982,10 +985,14 @@ void sc_get_user_data(uint32_t *magic, uint32_t *id, uint32_t *value, uint32_t *
     *total = g_state.user_total;
 }
 
-void sc_set_user_data(uint8_t new_value)
+void sc_set_user_data(bool want_admin, uint32_t new_value)
 {
     TRC("Enter\n")
+    // do we want regular or admin card?
+    g_state.user_admin_card = want_admin;
+    // store newly bought credit
     g_state.user_add_value = new_value;
-    DBG("User wants to add %d E to the card\n", g_state.user_add_value);
+    DBG("creating %s card\n", g_state.user_admin_card ? "ADMIN" : "REGULAR");
+    DBG("adding %d E to the card (if REGULAR)\n", g_state.user_add_value);
     request_update();
 }

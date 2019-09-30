@@ -32,9 +32,10 @@ bool sc_is_reader_attached();
 bool sc_is_card_inserted();
 char *sc_get_reader_name();
 bool sc_is_card_connected();
+bool sc_is_card_ready();
 void sc_identify_card();
 void sc_forget_card();
 void sc_get_user_data(uint32_t *magic, uint32_t *id, uint32_t *value, uint32_t *total);
-void sc_set_user_data(uint8_t new_value);
+void sc_set_user_data(bool want_admin, uint32_t new_value);
 
 #endif // SC_H_
