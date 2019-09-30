@@ -33,6 +33,7 @@
 // SCard API
 //#include "scui.h"
 #include "fsm.h"
+#include "scard.h"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -139,7 +140,9 @@ int main(int, char**)
     // SCard initialize
     sc_init();
 */
-    fsm_thread_start();
+//    fsm_thread_start();
+
+    scard_detect_thread_start();
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -283,7 +286,8 @@ int main(int, char**)
     // SCard destroy
     sc_destroy();
 */
-    fsm_thread_stop();
+    // fsm_thread_stop();
+    scard_detect_thread_stop();
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();

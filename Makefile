@@ -46,7 +46,8 @@ CXXFLAGS += -I./gl3w
 ## SCUI SOURCES
 ##---------------------------------------------------------------------
 SOURCES += ./scard.cpp
-SOURCES += ./fsm.cpp
+SOURCES += ./scard_detect.cpp
+# SOURCES += ./fsm.cpp
 # SOURCES += ./scui.cpp
 
 ##---------------------------------------------------------------------
