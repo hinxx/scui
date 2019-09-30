@@ -171,6 +171,9 @@ int main(int, char**)
 
             ImGui::Text("Bar text..");
 
+            ImGui::Text("Reader attached: %s (%s)", scard_reader_presence() ? "YES" : "NO", scard_reader_name());
+            ImGui::Text("Card inserted: %s", scard_card_presence() ? "YES" : "NO");
+
 /*
             // if (! have_reader && sc_is_reader_attached()) {
             //     identify_card = true;

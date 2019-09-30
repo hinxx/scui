@@ -118,6 +118,8 @@ void scard_wait_for_card(const SCARDCONTEXT context, const ULONG timeout);
 bool scard_reader_presence();
 bool scard_card_presence();
 char *scard_reader_name();
+void scard_reset_reader_state();
+void scard_reset_card_state();
 
 // detect
 bool scard_detect_thread_start();

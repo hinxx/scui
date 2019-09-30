@@ -130,6 +130,30 @@ char *scard_reader_name()
     return _reader_name;
 }
 
+void scard_reset_reader_state()
+{
+    TRC("clearing reader state..\n");
+    memset(_reader_name, 0, SC_MAX_READERNAME_LEN);
+    memset(_reader_firmware, 0, SC_MAX_FIRMWARE_LEN);
+    _reader_max_send = 0;
+    _reader_max_recv = 0;
+    _reader_card_types = 0;
+    _reader_selected_card = 0;
+    _reader_card_status = 0;
+    _reader_state = 0;
+}
+
+void scard_reset_card_state()
+{
+    TRC("clearing card state..\n");
+    // _card_pin_retries = 0;
+    // _card_protocol = 0;
+    // _user_id = 0;
+    // _user_magic = 0;
+    // _user_value = 0;
+    // _user_total = 0;
+}
+
 
 #if 0
 static bool connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle)
