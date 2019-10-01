@@ -120,7 +120,6 @@ static void *thread_fnc(void *ptr)
         (void)fflush(stdout);
 
         cur_state = run_state(cur_state, &_data);
-        // sleep(2);
 
         if (! _thread_run) {
             TRC("stopping thread ..\n");
@@ -171,11 +170,6 @@ void scard_cancel_wait(const SCARDCONTEXT context)
 state_t do_state_initial( instance_data_t *data )
 {
     TRC(">>>\n");
-
-    // debug
-    // sleep(1);
-    // debug
-
     scard_detect_reader(_context);
     return STATE_CHECK_READER;
 }
@@ -261,7 +255,6 @@ state_t do_state_identify( instance_data_t *data )
 state_t do_state_read( instance_data_t *data )
 {
     TRC(">>>\n");
-    
     BYTE bytes[USER_AREA_LENGTH];
     if (! scard_read_user_data(_card, USER_AREA_ADDRESS, bytes, USER_AREA_LENGTH)) {
         return STATE_DISCONNECT;
@@ -318,12 +311,10 @@ state_t do_state_set_pin( instance_data_t *data )
 state_t do_state_present_pin( instance_data_t *data )
 {
     TRC(">>>\n");
-
     data->pin_retries = 0xFF;
     if (! scard_present_pin(_card, SC_PIN_CODE_BYTE_1, SC_PIN_CODE_BYTE_2, SC_PIN_CODE_BYTE_3, &data->pin_retries)) {
         return STATE_ERROR;
     }
-
     return STATE_WAIT_USER;
 }
 
@@ -386,7 +377,6 @@ state_t do_state_idle( instance_data_t *data )
     DBG("waiting for change..\n");
     scard_wait_for_card(_context, INFINITE);
     // this point is reached if state has changed or user canceled the wait
-
     return STATE_INITIAL;
 }
 
@@ -395,13 +385,15 @@ state_t do_state_error( instance_data_t *data )
     TRC(">>>\n");
     
     ERR("ERROR ERROR ERROR\n");
-    // debug    
+    // debug
     sleep(10);
-    // debug    
+    // debug
+
+    if (! scard_card_presence()) {
+        return STATE_INITIAL;
+    }
     return STATE_ERROR;
 }
-
-
 
 unsigned scard_get_pin_retries()
 {
@@ -437,203 +429,3 @@ bool is_card_ready()
 {
     return _data.card_ready;
 }
-
-
-
-#if 0
-
-
-
-static bool process_update()
-{
-    bool rv = false;
-
-    rv = get_error_counter(worker_card);
-    if (! rv) {
-        return false;
-    }
-
-    // blank card has all bytes set to 0xFF, check user magic
-    if (g_state.user_magic == 0xFFFFFFFF) {
-        DBG("user magic is not set yet, need to present default PIN..\n");
-        BYTE pin[3] = {0};
-        // use default PIN here!!!
-        pin[0] = 0xFF;
-        pin[1] = 0xFF;
-        pin[2] = 0xFF;
-        rv = present_pin(worker_card, pin);
-        if (! rv) {
-            return false;
-        }
-
-        rv = get_error_counter(worker_card);
-        if (! rv) {
-            return false;
-        }
-
-        // use our PIN here!!!
-        pin[0] = SC_PIN_CODE_BYTE_1;
-        pin[1] = SC_PIN_CODE_BYTE_2;
-        pin[2] = SC_PIN_CODE_BYTE_3;
-        rv = change_pin(worker_card, pin);
-        if (! rv) {
-            return false;
-        }
-
-        // TODO
-        // write ID, magic, value & total 0
-
-    } else {
-        DBG("user magic is set, need to present our PIN..\n");
-        // before PIN is presented, returned PIN code from error check
-        // is 0x00 0x00 0x00, afterwards is our PIN code; present code 
-        // only once.
-        if (! ((g_state.card_pin_code[0] == SC_PIN_CODE_BYTE_1)
-            && (g_state.card_pin_code[1] == SC_PIN_CODE_BYTE_2)
-            && (g_state.card_pin_code[2] == SC_PIN_CODE_BYTE_3))) {
-            BYTE pin[3] = {0};
-            // use our PIN here!!!
-            pin[0] = SC_PIN_CODE_BYTE_1;
-            pin[1] = SC_PIN_CODE_BYTE_2;
-            pin[2] = SC_PIN_CODE_BYTE_3;
-            rv = present_pin(worker_card, pin);
-            if (! rv) {
-                return false;
-            }
-
-            rv = get_error_counter(worker_card);
-            if (! rv) {
-                return false;
-            }
-        }
-
-        uint32_t value = 0;
-        // what type of card is requested?
-        if (g_state.user_admin_card) {
-            // set admin ID
-            g_state.user_id = SC_ADMIN_ID;
-        } else {
-            // set regular ID
-            g_state.user_id = SC_REGULAR_ID;
-            // add new value to remaining user value
-            value = g_state.user_value + g_state.user_add_value;
-        }
-        // set value and total to be equal
-        g_state.user_value = value;
-        g_state.user_total = value;
-        // always use latest magic value!
-        g_state.user_magic = SC_MAGIC_VALUE;
-
-        // read from user data start
-        BYTE address = 64;
-        // read 16 bytes (4x 32-bit integers)
-        BYTE length = 16;
-        // data, 4x 32-bit integer in order: magic, ID, total, value
-        BYTE data[16] = {0};
-        data[0] =  (BYTE)(g_state.user_magic         & 0xFF);
-        data[1] =  (BYTE)((g_state.user_magic >> 8)  & 0xFF);
-        data[2] =  (BYTE)((g_state.user_magic >> 16) & 0xFF);
-        data[3] =  (BYTE)((g_state.user_magic >> 24) & 0xFF);
-        data[4] =  (BYTE)(g_state.user_id            & 0xFF);
-        data[5] =  (BYTE)((g_state.user_id    >> 8)  & 0xFF);
-        data[6] =  (BYTE)((g_state.user_id    >> 16) & 0xFF);
-        data[7] =  (BYTE)((g_state.user_id    >> 24) & 0xFF);
-        data[8] =  (BYTE)(g_state.user_total         & 0xFF);
-        data[9] =  (BYTE)((g_state.user_total >> 8)  & 0xFF);
-        data[10] = (BYTE)((g_state.user_total >> 16) & 0xFF);
-        data[11] = (BYTE)((g_state.user_total >> 24) & 0xFF);
-        data[12] = (BYTE)(g_state.user_value         & 0xFF);
-        data[13] = (BYTE)((g_state.user_value >> 8)  & 0xFF);
-        data[14] = (BYTE)((g_state.user_value >> 16) & 0xFF);
-        data[15] = (BYTE)((g_state.user_value >> 24) & 0xFF);
-        rv = write_card(worker_card, address, data, length);
-        if (! rv) {
-            return false;
-        }
-        DBG("Card updated, new value/total %u!\n", g_state.user_value);
-    }
-
-    return true;
-}
-
-/**
- * exported user API
- */
-
-bool sc_init()
-{
-    TRC("Enter\n");
-
-    bool rv = detect_thread_start();
-    assert(rv != false);
-    rv = worker_thread_start();
-    assert(rv != false);
-
-    TRC("Leave %d\n", rv);
-    return rv;
-}
-
-void sc_destroy()
-{
-    TRC("Enter\n")
-    
-    detect_thread_stop();
-    worker_thread_stop();
-
-    TRC("Leave\n");
-}
-
-bool sc_is_reader_attached()
-{
-    return reader_presence();
-}
-
-bool sc_is_card_inserted()
-{
-    return card_presence();
-}
-
-bool sc_is_card_connected()
-{
-    return (worker_card != 0) ? true : false;
-}
-
-char *sc_get_reader_name()
-{
-    return reader_name();
-}
-
-void sc_identify_card()
-{
-    TRC("Enter\n")
-    request_identify();
-}
-
-void sc_forget_card()
-{
-    TRC("Enter\n")
-    disconnect_card(&worker_card);
-}
-
-void sc_get_user_data(uint32_t *magic, uint32_t *id, uint32_t *value, uint32_t *total)
-{
-    // TRC("Enter\n")
-    *magic = g_state.user_magic;
-    *id = g_state.user_id;
-    *value = g_state.user_value;
-    *total = g_state.user_total;
-}
-
-void sc_set_user_data(bool want_admin, uint32_t new_value)
-{
-    TRC("Enter\n")
-    // do we want regular or admin card?
-    g_state.user_admin_card = want_admin;
-    // store newly bought credit
-    g_state.user_add_value = new_value;
-    DBG("creating %s card\n", g_state.user_admin_card ? "ADMIN" : "REGULAR");
-    DBG("adding %d E to the card (if REGULAR)\n", g_state.user_add_value);
-    request_update();
-}
-
-#endif

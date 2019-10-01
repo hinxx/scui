@@ -126,7 +126,6 @@ int main(int, char**)
     bool ready = false;
     bool ready_changed = false;
 
-    // scard_detect_thread_start();
     scard_user_thread_start();
 
 
@@ -239,7 +238,6 @@ int main(int, char**)
     }
 
     scard_user_thread_stop();
-    // scard_detect_thread_stop();
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
