@@ -90,7 +90,7 @@ bool scard_select_memory_card(const SCARDHANDLE handle);
 bool scard_get_error_counter(const SCARDHANDLE handle, LPBYTE pin1, LPBYTE pin2, LPBYTE pin3, LPBYTE pin_retries);
 bool scard_read_user_data(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len);
 bool scard_present_pin(const SCARDHANDLE handle, BYTE pin1, BYTE pin2, BYTE pin3, LPBYTE pin_retries);
-bool scard_change_pin(const SCARDHANDLE handle, LPBYTE pin);
+bool scard_change_pin(const SCARDHANDLE handle, BYTE pin1, BYTE pin2, BYTE pin3);
 bool scard_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len);
 void scard_cancel_wait(const SCARDCONTEXT context);
 

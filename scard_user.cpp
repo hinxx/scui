@@ -275,21 +275,44 @@ state_t do_state_read( instance_data_t *data )
     DBG("TOTAL: %u\n", data->user_total);
     DBG("VALUE: %u\n", data->user_value);
     
-    data->card_ready = true;
-
     if (data->user_magic == 0xFFFFFFFF) {
         // we have a new, vanilla, card
         return STATE_SET_PIN;
     }
 
+    data->card_ready = true;
     return STATE_PRESENT_PIN;
 }
 
 state_t do_state_set_pin( instance_data_t *data )
 {
     TRC(">>>\n");
-    // TODO !!!
-    return STATE_ERROR;
+
+    // UNTESTED !!!!
+
+    // use default PIN here!!!
+    data->pin_retries = 0xFF;
+    if (! scard_present_pin(_card, 0xFF, 0xFF, 0xFF, &data->pin_retries)) {
+        return STATE_ERROR;
+    }
+
+    // use our PIN here!!!
+    if (! scard_change_pin(_card, SC_PIN_CODE_BYTE_1, SC_PIN_CODE_BYTE_2, SC_PIN_CODE_BYTE_3)) {
+        return STATE_ERROR;
+    }
+    DBG("Card PIN updated!\n");
+
+    // reset the user values to defaults
+    data->user_value = 0;
+    data->user_total = 0;
+    data->user_magic = SC_MAGIC_VALUE;
+    data->user_id = SC_REGULAR_ID;
+    // provide new values for update state
+    data->new_id = SC_REGULAR_ID;
+    data->new_value = 0;
+
+    // perform initialization of the blank card now
+    return STATE_UPDATE;
 }
 
 state_t do_state_present_pin( instance_data_t *data )

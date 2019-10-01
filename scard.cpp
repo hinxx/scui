@@ -396,11 +396,11 @@ bool scard_present_pin(const SCARDHANDLE handle, BYTE pin1, BYTE pin2, BYTE pin3
     return true;
 }
 
-bool scard_change_pin(const SCARDHANDLE handle, LPBYTE pin)
+bool scard_change_pin(const SCARDHANDLE handle, BYTE pin1, BYTE pin2, BYTE pin3)
 {
     // REF-ACR38x-CCID-6.05.pdf, 9.3.6.8. CHANGE_CODE_MEMORY_CARD
     // for SLE 4442 and SLE 5542 memory cards
-    BYTE send_data[] = {0xFF, 0xD2, 0x00, 0x01, 0x03, pin[0], pin[1], pin[2]};
+    BYTE send_data[] = {0xFF, 0xD2, 0x00, 0x01, 0x03, pin1, pin2, pin3};
     ULONG send_len = sizeof(send_data);
     BYTE recv_data[SC_MAX_REQUEST_LEN+1] = {0};
     ULONG recv_len = sizeof(recv_data);
