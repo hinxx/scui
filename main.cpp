@@ -143,6 +143,7 @@ int main(int, char**)
 //    fsm_thread_start();
 
     scard_detect_thread_start();
+    scard_user_thread_start();
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -173,6 +174,13 @@ int main(int, char**)
 
             ImGui::Text("Reader attached: %s (%s)", scard_reader_presence() ? "YES" : "NO", scard_reader_name());
             ImGui::Text("Card inserted: %s", scard_card_presence() ? "YES" : "NO");
+            ImGui::Text("Card pin retries: %u", scard_get_pin_retries());
+
+            ImGui::Text("User info:");
+            ImGui::Text(" Magic: %u", scard_get_pin_user_magic());
+            ImGui::Text("    ID: %u", scard_get_pin_user_id());
+            ImGui::Text(" Value: %u", scard_get_pin_user_value());
+            ImGui::Text(" Total: %u", scard_get_pin_user_total());
 
 /*
             // if (! have_reader && sc_is_reader_attached()) {
@@ -290,6 +298,7 @@ int main(int, char**)
     sc_destroy();
 */
     // fsm_thread_stop();
+    scard_user_thread_stop();
     scard_detect_thread_stop();
 
     // Cleanup

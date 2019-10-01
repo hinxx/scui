@@ -120,9 +120,27 @@ bool scard_card_presence();
 char *scard_reader_name();
 void scard_reset_reader_state();
 void scard_reset_card_state();
+bool scard_connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle);
+void scard_disconnect_card(PSCARDHANDLE handle);
+bool scard_get_reader_info(const SCARDHANDLE handle);
+bool scard_select_memory_card(const SCARDHANDLE handle);
+bool scard_get_error_counter(const SCARDHANDLE handle, LPBYTE pin1, LPBYTE pin2, LPBYTE pin3, LPBYTE pin_retries);
+bool scard_read_user_data(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len);
+bool scard_present_pin(const SCARDHANDLE handle, BYTE pin1, BYTE pin2, BYTE pin3, LPBYTE pin_retries);
+bool scard_change_pin(const SCARDHANDLE handle, LPBYTE pin);
+bool scard_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len);
 
 // detect
 bool scard_detect_thread_start();
 void scard_detect_thread_stop();
+
+// user
+bool scard_user_thread_start();
+void scard_user_thread_stop();
+unsigned scard_get_pin_retries();
+unsigned scard_get_pin_user_magic();
+unsigned scard_get_pin_user_id();
+unsigned scard_get_pin_user_total();
+unsigned scard_get_pin_user_value();
 
 #endif // SCARD_H_
