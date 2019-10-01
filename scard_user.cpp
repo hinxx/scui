@@ -7,13 +7,18 @@
 
 typedef enum {
     STATE_INITIAL,
-    STATE_CARD_CONNECT,
-    STATE_CARD_DISCONNECT,
-    STATE_CARD_IDENTIFY,
-    STATE_CARD_READ,
-    STATE_CARD_SET_PIN,
-    STATE_CARD_PRESENT_PIN,
-    STATE_CARD_UPDATE,
+    STATE_CHECK_READER,
+    STATE_WAIT_READER,
+    STATE_CHECK_CARD,
+    STATE_WAIT_CARD,
+    STATE_CONNECT,
+    STATE_DISCONNECT,
+    STATE_IDENTIFY,
+    STATE_READ,
+    STATE_SET_PIN,
+    STATE_PRESENT_PIN,
+    STATE_WAIT_USER,
+    STATE_UPDATE,
     STATE_IDLE,
     STATE_ERROR,
     NUM_STATES } state_t;
@@ -22,25 +27,35 @@ typedef struct instance_data instance_data_t;
 typedef state_t state_func_t( instance_data_t *data );
 
 state_t do_state_initial( instance_data_t *data );
-state_t do_state_card_connect( instance_data_t *data );
-state_t do_state_card_disconnect( instance_data_t *data );
-state_t do_state_card_identify( instance_data_t *data );
-state_t do_state_card_read( instance_data_t *data );
-state_t do_state_card_set_pin( instance_data_t *data );
-state_t do_state_card_present_pin( instance_data_t *data );
-state_t do_state_card_update( instance_data_t *data );
+state_t do_state_check_reader( instance_data_t *data );
+state_t do_state_wait_reader( instance_data_t *data );
+state_t do_state_check_card( instance_data_t *data );
+state_t do_state_wait_card( instance_data_t *data );
+state_t do_state_connect( instance_data_t *data );
+state_t do_state_disconnect( instance_data_t *data );
+state_t do_state_identify( instance_data_t *data );
+state_t do_state_read( instance_data_t *data );
+state_t do_state_set_pin( instance_data_t *data );
+state_t do_state_present_pin( instance_data_t *data );
+state_t do_state_wait_user( instance_data_t *data );
+state_t do_state_update( instance_data_t *data );
 state_t do_state_idle( instance_data_t *data );
 state_t do_state_error( instance_data_t *data );
 
 state_func_t* const state_table[ NUM_STATES ] = {
     do_state_initial,
-    do_state_card_connect,
-    do_state_card_disconnect,
-    do_state_card_identify,
-    do_state_card_read,
-    do_state_card_set_pin,
-    do_state_card_present_pin,
-    do_state_card_update,
+    do_state_check_reader,
+    do_state_wait_reader,
+    do_state_check_card,
+    do_state_wait_card,
+    do_state_connect,
+    do_state_disconnect,
+    do_state_identify,
+    do_state_read,
+    do_state_set_pin,
+    do_state_present_pin,
+    do_state_wait_user,
+    do_state_update,
     do_state_idle,
     do_state_error
 };
@@ -116,10 +131,6 @@ static void *thread_fnc(void *ptr)
     return 0;
 }
 
-/**
- * Start the reader and card state change thread.
- * @return true - success, false - failure
- */
 bool scard_user_thread_start()
 {
     int rv = pthread_create(&_thread_id, NULL, thread_fnc, NULL);
@@ -132,16 +143,23 @@ bool scard_user_thread_start()
     return true;
 }
 
-/**
- * Stop the reader and card state change thread.
- * @return none
- */
 void scard_user_thread_stop()
 {
     // thread will exit
     _thread_run = false;
+    scard_cancel_wait(_context);
     pthread_join(_thread_id, NULL);
     DBG("Destroyed user thread\n");
+}
+
+void scard_cancel_wait(const SCARDCONTEXT context)
+{
+    // cancel waiting SCardEstablishContext() inside the thread
+    if (context) {
+        LONG rv = SCardCancel(context);
+        CHECK("SCardCancel", rv);
+    }
+    DBG("Canceled wait for a change..\n");
 }
 
 
@@ -151,58 +169,99 @@ state_t do_state_initial( instance_data_t *data )
 {
     TRC(">>>\n");
 
-    sleep(1);
+    // debug
+    // sleep(1);
+    // debug
 
-    if (! scard_reader_presence()) {
-        return STATE_INITIAL;
-    }
-    if (! scard_card_presence()) {
-        return STATE_INITIAL;
-    }
-    return STATE_CARD_CONNECT;
+    scard_detect_reader(_context);
+    return STATE_CHECK_READER;
 }
 
-state_t do_state_card_connect( instance_data_t *data )
+state_t do_state_check_reader( instance_data_t *data )
+{
+    TRC(">>>\n");
+    if (! scard_reader_presence()) {
+        return STATE_WAIT_READER;
+    }
+    return STATE_CHECK_CARD;
+}
+
+state_t do_state_wait_reader( instance_data_t *data )
+{
+    TRC(">>>\n");
+    DBG("NO READER\n");
+    DBG("waiting for reader..\n");
+    scard_reset_reader_state();
+    scard_reset_card_state();
+    scard_wait_for_reader(_context, INFINITE);
+    // this point is reached if state has changed or user canceled the wait
+    return STATE_INITIAL;
+}
+
+state_t do_state_check_card( instance_data_t *data )
+{
+    TRC(">>>\n");
+    DBG("READER %s\n", scard_reader_name());
+    DBG("probing for card..\n");
+    scard_wait_for_card(_context, 1);
+    if (! scard_card_presence()) {
+        return STATE_WAIT_CARD;
+    }
+    return STATE_CONNECT;
+}
+
+state_t do_state_wait_card( instance_data_t *data )
+{
+    TRC(">>>\n");
+    DBG("NO CARD!\n");
+    DBG("waiting for card insert..\n");
+    scard_reset_card_state();
+    scard_wait_for_card(_context, INFINITE);
+    // this point is reached if state has changed or user canceled the wait
+    return STATE_INITIAL;
+}
+
+state_t do_state_connect( instance_data_t *data )
 {
     TRC(">>>\n");
     if (! scard_connect_card(_context, &_card)) {
         return STATE_INITIAL;
     }
-    return STATE_CARD_IDENTIFY;
+    return STATE_IDENTIFY;
 }
 
-state_t do_state_card_disconnect( instance_data_t *data )
+state_t do_state_disconnect( instance_data_t *data )
 {
     TRC(">>>\n");
     forget_card(data);
-    scard_connect_card(_context, &_card);
+    scard_disconnect_card(&_card);
     return STATE_INITIAL;
 }
 
-state_t do_state_card_identify( instance_data_t *data )
+state_t do_state_identify( instance_data_t *data )
 {
     TRC(">>>\n");
     if (! scard_get_reader_info(_card)) {
-        return STATE_CARD_DISCONNECT;
+        return STATE_DISCONNECT;
     }
     if (! scard_select_memory_card(_card)) {
-        return STATE_CARD_DISCONNECT;
+        return STATE_DISCONNECT;
     }
     data->pin_retries = 0xFF;
     data->pin_code1 = data->pin_code2 = data->pin_code3 = 0xFF;
     if (! scard_get_error_counter(_card, &data->pin_code1, &data->pin_code2, &data->pin_code3, &data->pin_retries)) {
-        return STATE_CARD_DISCONNECT;
+        return STATE_DISCONNECT;
     }
-    return STATE_CARD_READ;
+    return STATE_READ;
 }
 
-state_t do_state_card_read( instance_data_t *data )
+state_t do_state_read( instance_data_t *data )
 {
     TRC(">>>\n");
     
     BYTE bytes[USER_AREA_LENGTH];
     if (! scard_read_user_data(_card, USER_AREA_ADDRESS, bytes, USER_AREA_LENGTH)) {
-        return STATE_CARD_DISCONNECT;
+        return STATE_DISCONNECT;
     }
     data->user_magic = *(uint32_t *)&bytes[0];
     data->user_id = *(uint32_t *)&bytes[4];
@@ -215,19 +274,20 @@ state_t do_state_card_read( instance_data_t *data )
     
     if (data->user_magic == 0xFFFFFFFF) {
         // we have a new, vanilla, card
-        return STATE_CARD_SET_PIN;
+        return STATE_SET_PIN;
     }
 
-    return STATE_CARD_PRESENT_PIN;
+    return STATE_PRESENT_PIN;
 }
 
-state_t do_state_card_set_pin( instance_data_t *data )
+state_t do_state_set_pin( instance_data_t *data )
 {
     TRC(">>>\n");
-    return STATE_IDLE;
+    // TODO !!!
+    return STATE_ERROR;
 }
 
-state_t do_state_card_present_pin( instance_data_t *data )
+state_t do_state_present_pin( instance_data_t *data )
 {
     TRC(">>>\n");
 
@@ -236,10 +296,25 @@ state_t do_state_card_present_pin( instance_data_t *data )
         return STATE_ERROR;
     }
 
-    return STATE_IDLE;
+    return STATE_WAIT_USER;
 }
 
-state_t do_state_card_update( instance_data_t *data )
+state_t do_state_wait_user( instance_data_t *data )
+{
+    DBG("waiting for user UPDATE..\n");
+    scard_wait_for_card(_context, INFINITE);
+    // this point is reached if state has changed or user canceled the wait
+
+    if (! data->do_update) {
+        return STATE_DISCONNECT;
+    }
+
+    // clear flag; perform update only once
+    data->do_update = false;
+    return STATE_UPDATE;
+}
+
+state_t do_state_update( instance_data_t *data )
 {
     TRC(">>>\n");
 
@@ -273,29 +348,18 @@ state_t do_state_card_update( instance_data_t *data )
     DBG("Card updated, new value/total %u!\n", value);
 
     // force re-connect of the card, and re-read
-    return STATE_CARD_DISCONNECT;
+    return STATE_DISCONNECT;
 }
 
 state_t do_state_idle( instance_data_t *data )
 {
     TRC(">>>\n");
 
-    // debug
-    sleep(1);
-    // debug
-    
-    if (! scard_reader_presence()) {
-        return STATE_CARD_DISCONNECT;
-    }
-    if (! scard_card_presence()) {
-        return STATE_CARD_DISCONNECT;
-    }
-    if (data->do_update) {
-        data->do_update = false;
-        return STATE_CARD_UPDATE;
-    }
+    DBG("waiting for change..\n");
+    scard_wait_for_card(_context, INFINITE);
+    // this point is reached if state has changed or user canceled the wait
 
-    return STATE_IDLE;
+    return STATE_INITIAL;
 }
 
 state_t do_state_error( instance_data_t *data )
@@ -306,7 +370,7 @@ state_t do_state_error( instance_data_t *data )
     // debug    
     sleep(10);
     // debug    
-    return STATE_IDLE;
+    return STATE_ERROR;
 }
 
 
@@ -337,6 +401,8 @@ void update_card(uint32_t value, uint32_t id)
     _data.new_value = value;
     _data.new_id = id;
     _data.do_update = true;
+    // cancel wait and perform update
+    scard_cancel_wait(_context);
 }
 
 

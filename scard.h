@@ -92,10 +92,11 @@ bool scard_read_user_data(const SCARDHANDLE handle, BYTE address, LPBYTE data, B
 bool scard_present_pin(const SCARDHANDLE handle, BYTE pin1, BYTE pin2, BYTE pin3, LPBYTE pin_retries);
 bool scard_change_pin(const SCARDHANDLE handle, LPBYTE pin);
 bool scard_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE len);
+void scard_cancel_wait(const SCARDCONTEXT context);
 
 // detect
-bool scard_detect_thread_start();
-void scard_detect_thread_stop();
+// bool scard_detect_thread_start();
+// void scard_detect_thread_stop();
 
 // user
 bool scard_user_thread_start();

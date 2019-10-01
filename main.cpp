@@ -124,7 +124,7 @@ int main(int, char**)
     const ImU8 u8_one = 1;
     int card_type = 0;
 
-    scard_detect_thread_start();
+    // scard_detect_thread_start();
     scard_user_thread_start();
 
     // Main loop
@@ -144,7 +144,7 @@ int main(int, char**)
 
         // SCard window
         {
-            ImGui::Begin("Sole Card UI 0.0.2");
+            ImGui::Begin("Sole Card UI 0.0.3");
 
             ImGui::Text("Reader attached: %s (%s)", scard_reader_presence() ? "YES" : "NO", scard_reader_name());
             ImGui::Text("Card inserted: %s", scard_card_presence() ? "YES" : "NO");
@@ -230,7 +230,7 @@ int main(int, char**)
     }
 
     scard_user_thread_stop();
-    scard_detect_thread_stop();
+    // scard_detect_thread_stop();
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
