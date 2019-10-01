@@ -72,43 +72,6 @@
 #define SC_PIN_CODE_BYTE_2              0xDE
 #define SC_PIN_CODE_BYTE_3              0xA5
 
-// struct state {
-//     // global
-//     // bool error;
-
-//     // reader
-//     // bool reader_attached;
-//     char reader_name[SC_MAX_READERNAME_LEN+1];
-//     char reader_firmware[SC_MAX_FIRMWARE_LEN+1];
-//     BYTE reader_max_send;
-//     BYTE reader_max_recv;
-//     USHORT reader_card_types;
-//     BYTE reader_selected_card;
-//     BYTE reader_card_status;
-//     LONG reader_state;
-
-//     // card
-//     // bool card_inserted;
-//     // bool card_connected;
-//     // bool card_selected;
-//     // bool card_personalized;
-//     // bool card_unlocked;
-//     // bool card_identified;
-//     BYTE card_pin_retries;
-//     PSCARD_IO_REQUEST card_protocol;
-//     BYTE card_pin_code[3];
-
-//     // user
-//     uint32_t user_magic;
-//     uint32_t user_id;
-//     uint32_t user_total;
-//     uint32_t user_value;
-
-//     uint32_t user_add_value;
-//     bool user_admin_card;
-// };
-
-
 // low level
 bool scard_create_context(PSCARDCONTEXT context);
 void scard_destroy_context(PSCARDCONTEXT context);
@@ -142,5 +105,6 @@ unsigned scard_get_pin_user_magic();
 unsigned scard_get_pin_user_id();
 unsigned scard_get_pin_user_total();
 unsigned scard_get_pin_user_value();
+void update_card(uint32_t value, uint32_t id);
 
 #endif // SCARD_H_

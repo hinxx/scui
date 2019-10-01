@@ -15,6 +15,7 @@ typedef enum {
     STATE_CARD_PRESENT_PIN,
     STATE_CARD_UPDATE,
     STATE_IDLE,
+    STATE_ERROR,
     NUM_STATES } state_t;
 
 typedef struct instance_data instance_data_t;
@@ -29,6 +30,7 @@ state_t do_state_card_set_pin( instance_data_t *data );
 state_t do_state_card_present_pin( instance_data_t *data );
 state_t do_state_card_update( instance_data_t *data );
 state_t do_state_idle( instance_data_t *data );
+state_t do_state_error( instance_data_t *data );
 
 state_func_t* const state_table[ NUM_STATES ] = {
     do_state_initial,
@@ -40,6 +42,7 @@ state_func_t* const state_table[ NUM_STATES ] = {
     do_state_card_present_pin,
     do_state_card_update,
     do_state_idle,
+    do_state_error
 };
 
 // user data start in smartcard memory
@@ -53,11 +56,16 @@ struct instance_data {
     uint8_t pin_code2;
     uint8_t pin_code3;
 
-    // user data
+    // user card data
     uint32_t user_magic;
     uint32_t user_id;
     uint32_t user_total;
     uint32_t user_value;
+
+    // update data
+    uint32_t new_value;
+    uint32_t new_id;
+    bool do_update;
 };
 
 static SCARDCONTEXT _context = 0;
@@ -66,27 +74,15 @@ static bool _thread_run = true;
 static SCARDHANDLE _card = 0;
 static instance_data_t _data = {0};
 
-
-
 static state_t run_state( state_t cur_state, instance_data_t *data )
 {
     state_t new_state = state_table[cur_state](data);
-
-    // transition_func_t *transition = transition_table[cur_state][new_state];
-    // if (transition) {
-    //     transition(data);
-    // }
-
     return new_state;
 };
 
 static void forget_card(instance_data_t *data)
 {
     TRC("clearing user info..\n");
-    // data->user_id = 0;
-    // data->user_magic = 0;
-    // data->user_value = 0;
-    // data->user_total = 0;
     memset(data, 0, sizeof(instance_data_t));
 }
 
@@ -105,23 +101,6 @@ static void *thread_fnc(void *ptr)
         TRC("loop, #%d ..\n", fsm_loop);
         (void)fflush(stdout);
 
-        // TRC("waiting for condition ..\n");
-        // Lock mutex and then wait for signal to relase mutex
-        // pthread_mutex_lock(&worker_mutex);
-        // mutex gets unlocked if condition variable is signaled
-        // pthread_cond_wait(&worker_condition, &worker_mutex);
-        // this thread can now handle new request
-        
-        // reset handled request ID
-        // l_req_id_handled = 0;
-        // make local copies of the new request data
-        // req_id = l_req_id;
-        // request = worker_request;
-        // req_len = l_req_len;
-        // memcpy(req_data, l_req_data, l_req_len);
-        // pthread_mutex_unlock(&worker_mutex);
-        // TRC("condition met!\n");
-
         cur_state = run_state(cur_state, &_data);
         // sleep(2);
 
@@ -129,25 +108,6 @@ static void *thread_fnc(void *ptr)
             TRC("stopping thread ..\n");
             break;
         }
-
-        // invoke request handling function from this thread!
-        // req_id_handled = sc_handle_request(req_id, req, req_data, req_len);
-        // pthread_mutex_lock(&worker_mutex);
-        // l_req_id_handled = req_id_handled; 
-        // pthread_mutex_unlock(&worker_mutex);
-
-        // if (request == SC_REQUEST_IDENTIFY_CARD) {
-        //     process_identify();
-        // } else if (request == SC_REQUEST_UPDATE_CARD) {
-        //     process_update();
-        // }
-
-        // XXX not calling any SCardGetStatusChange() in this thread
-        // if the wait was cancelled (i.e. exiting the app), exit the thread!
-        // if (rv == SCARD_E_CANCELLED) {
-        //     TRC("stopping thread ..\n");
-        //     break;
-        // }
     }
 
     DBG("destroying CONTEXT 0x%08lX\n", _context);
@@ -180,12 +140,6 @@ void scard_user_thread_stop()
 {
     // thread will exit
     _thread_run = false;
-
-    // pthread_mutex_lock(&worker_mutex);
-    // signal waiting thread by freeing the mutex
-    // pthread_cond_signal(&worker_condition);
-    // pthread_mutex_unlock(&worker_mutex);
-
     pthread_join(_thread_id, NULL);
     DBG("Destroyed user thread\n");
 }
@@ -234,8 +188,8 @@ state_t do_state_card_identify( instance_data_t *data )
     if (! scard_select_memory_card(_card)) {
         return STATE_CARD_DISCONNECT;
     }
-    data->pin_retries = 0;
-    data->pin_code1 = data->pin_code2 = data->pin_code3 = 0;
+    data->pin_retries = 0xFF;
+    data->pin_code1 = data->pin_code2 = data->pin_code3 = 0xFF;
     if (! scard_get_error_counter(_card, &data->pin_code1, &data->pin_code2, &data->pin_code3, &data->pin_retries)) {
         return STATE_CARD_DISCONNECT;
     }
@@ -276,29 +230,82 @@ state_t do_state_card_set_pin( instance_data_t *data )
 state_t do_state_card_present_pin( instance_data_t *data )
 {
     TRC(">>>\n");
+
+    data->pin_retries = 0xFF;
+    if (! scard_present_pin(_card, SC_PIN_CODE_BYTE_1, SC_PIN_CODE_BYTE_2, SC_PIN_CODE_BYTE_3, &data->pin_retries)) {
+        return STATE_ERROR;
+    }
+
     return STATE_IDLE;
 }
 
 state_t do_state_card_update( instance_data_t *data )
 {
     TRC(">>>\n");
-    return STATE_IDLE;
+
+    uint32_t value = 0;
+    if (data->new_id == SC_REGULAR_ID) {
+        // add new value to remaining user value
+        value = data->user_value + data->new_value;
+    }
+
+    // always use latest magic value!
+    uint32_t magic = SC_MAGIC_VALUE;
+    // 4x 32-bit integer in order: magic, ID, total, value
+    BYTE bytes[USER_AREA_LENGTH] = {0};
+    *(uint32_t *)&bytes[0] = magic;
+    *(uint32_t *)&bytes[4] = data->new_id;
+    // set value and total to be equal
+    *(uint32_t *)&bytes[8] = value;
+    *(uint32_t *)&bytes[12] = value;
+    printf("new MAGIC %u\n", magic);
+    printf("new ID    %u\n", data->new_id);
+    printf("new TOTAL %u\n", value);
+    printf("new VALUE %u\n", value);
+    for (int i = 0; i < USER_AREA_LENGTH; i++) {
+        printf("%02X ", *(bytes + i));
+    }
+    printf("\n");
+
+    if (! scard_write_card(_card, USER_AREA_ADDRESS, bytes, USER_AREA_LENGTH)) {
+        return STATE_ERROR;
+    }
+    DBG("Card updated, new value/total %u!\n", value);
+
+    // force re-connect of the card, and re-read
+    return STATE_CARD_DISCONNECT;
 }
 
 state_t do_state_idle( instance_data_t *data )
 {
     TRC(">>>\n");
 
-    // debug    
+    // debug
     sleep(1);
+    // debug
+    
     if (! scard_reader_presence()) {
         return STATE_CARD_DISCONNECT;
     }
     if (! scard_card_presence()) {
         return STATE_CARD_DISCONNECT;
     }
-    // debug    
+    if (data->do_update) {
+        data->do_update = false;
+        return STATE_CARD_UPDATE;
+    }
 
+    return STATE_IDLE;
+}
+
+state_t do_state_error( instance_data_t *data )
+{
+    TRC(">>>\n");
+    
+    ERR("ERROR ERROR ERROR\n");
+    // debug    
+    sleep(10);
+    // debug    
     return STATE_IDLE;
 }
 
@@ -325,6 +332,12 @@ unsigned scard_get_pin_user_value()
     return _data.user_value;
 }
 
+void update_card(uint32_t value, uint32_t id)
+{
+    _data.new_value = value;
+    _data.new_id = id;
+    _data.do_update = true;
+}
 
 
 

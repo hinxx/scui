@@ -48,8 +48,7 @@ CXXFLAGS += -I./gl3w
 SOURCES += ./scard.cpp
 SOURCES += ./scard_detect.cpp
 SOURCES += ./scard_user.cpp
-# SOURCES += ./fsm.cpp
-# SOURCES += ./scui.cpp
+
 
 ##---------------------------------------------------------------------
 ## BUILD FLAGS PER PLATFORM

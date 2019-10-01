@@ -24,9 +24,7 @@ static USHORT _reader_card_types;
 static BYTE _reader_selected_card;
 static BYTE _reader_card_status;
 static LONG _reader_state;
-// static BYTE _card_pin_retries;
 static PSCARD_IO_REQUEST _card_protocol;
-// static BYTE _card_pin_code[3];
 
 bool scard_create_context(PSCARDCONTEXT context)
 {
@@ -149,12 +147,7 @@ void scard_reset_reader_state()
 void scard_reset_card_state()
 {
     TRC("clearing card state..\n");
-    // _card_pin_retries = 0;
     _card_protocol = 0;
-    // _user_id = 0;
-    // _user_magic = 0;
-    // _user_value = 0;
-    // _user_total = 0;
 }
 
 bool scard_connect_card(const SCARDCONTEXT context, PSCARDHANDLE handle)
@@ -439,8 +432,6 @@ bool scard_write_card(const SCARDHANDLE handle, BYTE address, LPBYTE data, BYTE 
     assert(len + 5 <= SC_MAX_REQUEST_LEN);
     memcpy(&send_data[5], data, len);
     ULONG send_len = len + 5;
-    // LONG rv = do_xfer(handle, send_data, send_len, recv_data, recv_len, sw_data);
-    // return rv;
     BYTE recv_data[SC_MAX_REQUEST_LEN+1] = {0};
     ULONG recv_len = sizeof(recv_data);
     BYTE sw_data[2+1] = {0};

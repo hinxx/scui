@@ -31,8 +31,6 @@
 #endif
 
 // SCard API
-//#include "scui.h"
-#include "fsm.h"
 #include "scard.h"
 
 static void glfw_error_callback(int error, const char* description)
@@ -121,26 +119,10 @@ int main(int, char**)
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-/*
-    bool have_reader = false;
-    bool have_card = false;
-    bool connected_card = false;
-    bool identify_card = false;
-    uint32_t magic = 0;
-    uint32_t id = 0;
-    uint32_t value = 0;
-    uint32_t total = 0;
-    // uint32_t new_value = 2;
+
     static ImU8 new_value = 2;
     const ImU8 u8_one = 1;
-    // static bool admin_card = false;
-    static int card_type = 0;
-
-    // ULONG req_id = 0;
-    // SCard initialize
-    sc_init();
-*/
-//    fsm_thread_start();
+    int card_type = 0;
 
     scard_detect_thread_start();
     scard_user_thread_start();
@@ -162,15 +144,7 @@ int main(int, char**)
 
         // SCard window
         {
-            ImGui::Begin("Sole Card UI 0.0.1");
-
-            ImGui::Text("Foo text..");
-
-            if (ImGui::Button("User action")) {
-                // request FSM state to update the card..
-            }
-
-            ImGui::Text("Bar text..");
+            ImGui::Begin("Sole Card UI 0.0.2");
 
             ImGui::Text("Reader attached: %s (%s)", scard_reader_presence() ? "YES" : "NO", scard_reader_name());
             ImGui::Text("Card inserted: %s", scard_card_presence() ? "YES" : "NO");
@@ -182,67 +156,28 @@ int main(int, char**)
             ImGui::Text(" Value: %u", scard_get_pin_user_value());
             ImGui::Text(" Total: %u", scard_get_pin_user_total());
 
-/*
-            // if (! have_reader && sc_is_reader_attached()) {
-            //     identify_card = true;
-            // }
-            have_reader = sc_is_reader_attached();
-            if (! have_card && sc_is_card_inserted()) {
-                identify_card = true;
-            }
-            have_card = sc_is_card_inserted();
-
-            ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_get_reader_name());
-            ImGui::Text("Card inserted: %s", have_card ? "YES" : "NO");
-            ImGui::Text("Identify card: %s", identify_card ? "YES" : "NO");
-            connected_card = sc_is_card_connected();
-            ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");
-
-            if (identify_card) {
-                sc_identify_card();
-                identify_card = false;
-            }
-            // XXX: Call this only once after the card is identfied?
-            //      Need to wait for the identify request to finish first!!!
-            sc_get_user_data(&magic, &id, &value, &total);
-            ImGui::Text("User info:");
-            ImGui::Text(" Magic: %d", magic);
-            ImGui::Text("    ID: %d", id);
-            ImGui::Text(" Value: %d", value);
-            ImGui::Text(" Total: %d", total);
-
-            // ImGui::InputInt("New value", (int *)&new_value);
-            // ImGui::SameLine(); HelpMarker("You can apply arithmetic operators +,*,/ on numerical values.\n  e.g. [ 100 ], input \'*2\', result becomes [ 200 ]\nUse +- to subtract.\n");
-            // ImGui::InputScalar("New value", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
-            // ImGui::Checkbox("Create admin card?", &admin_card);
-            ImGui::Text("Card type:"); ImGui::SameLine();
-            ImGui::RadioButton("Regular", &card_type, 1); ImGui::SameLine();
-            ImGui::RadioButton("Admin", &card_type, 2);
-            // ImGui::RadioButton("radio b", &card_type, 1); ImGui::SameLine();
-            // ImGui::RadioButton("radio c", &card_type, 2);
-            if (card_type == 1) {
-                ImGui::Text("New value:");
-                ImGui::SameLine();
-                ImGui::InputScalar("", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
-            }
-            // ImGui::SameLine();
-            if (ImGui::Button("Update card")) {
-                sc_set_user_data(card_type == 2, (uint32_t)new_value);
+            if (scard_card_presence()) {
+                ImGui::Text("Card type:"); ImGui::SameLine();
+                ImGui::RadioButton("Unknown", &card_type, 0); ImGui::SameLine();
+                ImGui::RadioButton("Regular", &card_type, SC_REGULAR_ID); ImGui::SameLine();
+                ImGui::RadioButton("Admin", &card_type, SC_ADMIN_ID);
+                if (card_type == SC_REGULAR_ID) {
+                    ImGui::Text("New value:");
+                    ImGui::SameLine();
+                    ImGui::InputScalar("", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
+                }
+                if (card_type) {
+                    if (ImGui::Button("Update card")) {
+                        update_card((uint32_t)new_value, (uint32_t)card_type);
+                    }
+                }
             }
 
-            // ImGui::Text("Req ID: %lu", req_id);
-
-            // handled_req_id = sc_handled_request();
-            // ImGui::Text("Handled Req ID %lu: %s", req_id, sc_is_request_handled() ? "YES" : "NO");
-
-            // if card or reader disappeared, and card was connected; disconnect card!
-            if (! (have_card && have_reader) && connected_card) {
-                // req_id = sc_request_disconnect();
-                sc_forget_card();
-                new_value = 2;
+            if (! scard_card_presence()) {
+                card_type = 0;
             }
-*/
-            ImGui::End();            
+
+            ImGui::End();
         }
 
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
@@ -293,11 +228,7 @@ int main(int, char**)
 
         glfwSwapBuffers(window);
     }
-/*
-    // SCard destroy
-    sc_destroy();
-*/
-    // fsm_thread_stop();
+
     scard_user_thread_stop();
     scard_detect_thread_stop();
 
