@@ -108,4 +108,6 @@ unsigned scard_get_pin_user_total();
 unsigned scard_get_pin_user_value();
 void update_card(uint32_t value, uint32_t id);
 
+bool is_card_ready();
+
 #endif // SCARD_H_

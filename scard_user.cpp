@@ -77,6 +77,9 @@ struct instance_data {
     uint32_t user_total;
     uint32_t user_value;
 
+    // card readiness
+    bool card_ready;
+
     // update data
     uint32_t new_value;
     uint32_t new_id;
@@ -272,6 +275,8 @@ state_t do_state_read( instance_data_t *data )
     DBG("TOTAL: %u\n", data->user_total);
     DBG("VALUE: %u\n", data->user_value);
     
+    data->card_ready = true;
+
     if (data->user_magic == 0xFFFFFFFF) {
         // we have a new, vanilla, card
         return STATE_SET_PIN;
@@ -405,7 +410,10 @@ void update_card(uint32_t value, uint32_t id)
     scard_cancel_wait(_context);
 }
 
-
+bool is_card_ready()
+{
+    return _data.card_ready;
+}
 
 
 

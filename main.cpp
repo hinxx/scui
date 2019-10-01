@@ -122,10 +122,13 @@ int main(int, char**)
 
     static ImU8 new_value = 2;
     const ImU8 u8_one = 1;
-    int card_type = 0;
+    int card_id = 0;
+    bool ready = false;
+    bool ready_changed = false;
 
     // scard_detect_thread_start();
     scard_user_thread_start();
+
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -144,6 +147,11 @@ int main(int, char**)
 
         // SCard window
         {
+            if (ready != is_card_ready()) {
+                ready = is_card_ready();
+                ready_changed = true;
+            }
+
             ImGui::Begin("Sole Card UI 0.0.3");
 
             ImGui::Text("Reader attached: %s (%s)", scard_reader_presence() ? "YES" : "NO", scard_reader_name());
@@ -156,27 +164,28 @@ int main(int, char**)
             ImGui::Text(" Value: %u", scard_get_pin_user_value());
             ImGui::Text(" Total: %u", scard_get_pin_user_total());
 
-            if (scard_card_presence()) {
+            if (ready) {
+                // if ready change was detected and we card is present set the initial card ID
+                // and reset the new user initial value to default
+                if (ready_changed) {
+                    card_id = scard_get_pin_user_id();
+                    new_value = 2;
+                }
                 ImGui::Text("Card type:"); ImGui::SameLine();
-                ImGui::RadioButton("Unknown", &card_type, 0); ImGui::SameLine();
-                ImGui::RadioButton("Regular", &card_type, SC_REGULAR_ID); ImGui::SameLine();
-                ImGui::RadioButton("Admin", &card_type, SC_ADMIN_ID);
-                if (card_type == SC_REGULAR_ID) {
+                ImGui::RadioButton("Regular", &card_id, SC_REGULAR_ID); ImGui::SameLine();
+                ImGui::RadioButton("Admin", &card_id, SC_ADMIN_ID);
+                if (card_id == SC_REGULAR_ID) {
                     ImGui::Text("New value:");
                     ImGui::SameLine();
                     ImGui::InputScalar("", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
                 }
-                if (card_type) {
-                    if (ImGui::Button("Update card")) {
-                        update_card((uint32_t)new_value, (uint32_t)card_type);
-                    }
+                if (ImGui::Button("Update card")) {
+                    // perform the card update according to users wishes
+                    update_card((uint32_t)new_value, (uint32_t)card_id);
                 }
             }
 
-            if (! scard_card_presence()) {
-                card_type = 0;
-            }
-
+            ready_changed = false;
             ImGui::End();
         }
 
