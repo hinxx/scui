@@ -116,6 +116,10 @@ int main(int, char**)
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
     //IM_ASSERT(font != NULL);
 
+    io.Fonts->AddFontDefault();
+    ImFont* font = io.Fonts->AddFontFromFileTTF("./Cousine-Regular.ttf", 25.0f);
+    IM_ASSERT(font != NULL);
+
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -152,6 +156,11 @@ int main(int, char**)
             }
 
             ImGui::Begin("Sole Card UI 0.0.3");
+
+            ImGui::Text("Hello"); // use the default font (which is the first loaded font)
+            ImGui::PushFont(font);
+            ImGui::Text("Hello with another font");
+            ImGui::PopFont();
 
             ImGui::Text("Reader attached: %s (%s)", scard_reader_presence() ? "YES" : "NO", scard_reader_name());
             ImGui::Text("Card inserted: %s", scard_card_presence() ? "YES" : "NO");
