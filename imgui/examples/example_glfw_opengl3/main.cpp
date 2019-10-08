@@ -7,9 +7,10 @@
 #include "imgui_impl_opengl3.h"
 #include <stdio.h>
 
-// About OpenGL function loaders: modern OpenGL doesn't have a standard header file and requires individual function pointers to be loaded manually.
-// Helper libraries are often used for this purpose! Here we are supporting a few common ones: gl3w, glew, glad.
-// You may use another loader/header of your choice (glext, glLoadGen, etc.), or chose to manually implement your own.
+// About Desktop OpenGL function loaders:
+//  Modern desktop OpenGL doesn't have a standard portable header file to load OpenGL function pointers.
+//  Helper libraries are often used for this purpose! Here we are supporting a few common ones (gl3w, glew, glad).
+//  You may use another loader/header of your choice (glext, glLoadGen, etc.), or chose to manually implement your own.
 #if defined(IMGUI_IMPL_OPENGL_LOADER_GL3W)
 #include <GL/gl3w.h>    // Initialize with gl3wInit()
 #elif defined(IMGUI_IMPL_OPENGL_LOADER_GLEW)
@@ -29,9 +30,6 @@
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif
-
-// SCard API
-#include "scard.h"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -63,8 +61,7 @@ int main(int, char**)
 #endif
 
     // Create window with graphics context
-    // GLFWwindow* window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
-    GLFWwindow* window = glfwCreateWindow(640, 720, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
     if (window == NULL)
         return 1;
     glfwMakeContextCurrent(window);
@@ -116,23 +113,10 @@ int main(int, char**)
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
     //IM_ASSERT(font != NULL);
 
-    // FONT
-    // io.Fonts->AddFontDefault();
-    // ImFont* font = io.Fonts->AddFontFromFileTTF("./Cousine-Regular.ttf", 25.0f);
-    // IM_ASSERT(font != NULL);
-
+    // Our state
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-    static ImU8 new_value = 2;
-    const ImU8 u8_one = 1;
-    int card_id = 0;
-    bool ready = false;
-    bool ready_changed = false;
-
-    scard_user_thread_start();
-
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -148,56 +132,6 @@ int main(int, char**)
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-
-        // SCard window
-        {
-            if (ready != is_card_ready()) {
-                ready = is_card_ready();
-                ready_changed = true;
-            }
-
-            ImGui::Begin("Sole Card UI 0.0.3");
-
-            // FONT
-            // ImGui::Text("Hello"); // use the default font (which is the first loaded font)
-            // ImGui::PushFont(font);
-            // ImGui::Text("Hello with another font");
-            // ImGui::PopFont();
-
-            ImGui::Text("Reader attached: %s (%s)", scard_reader_presence() ? "YES" : "NO", scard_reader_name());
-            ImGui::Text("Card inserted: %s", scard_card_presence() ? "YES" : "NO");
-            ImGui::Text("Card pin retries: %u", scard_get_pin_retries());
-
-            ImGui::Text("User info:");
-            ImGui::Text(" Magic: %u", scard_get_pin_user_magic());
-            ImGui::Text("    ID: %u", scard_get_pin_user_id());
-            ImGui::Text(" Value: %u", scard_get_pin_user_value());
-            ImGui::Text(" Total: %u", scard_get_pin_user_total());
-
-            if (ready) {
-                // if ready change was detected and we card is present set the initial card ID
-                // and reset the new user initial value to default
-                if (ready_changed) {
-                    card_id = scard_get_pin_user_id();
-                    new_value = 2;
-                }
-                ImGui::Text("Card type:"); ImGui::SameLine();
-                ImGui::RadioButton("Regular", &card_id, SC_REGULAR_ID); ImGui::SameLine();
-                ImGui::RadioButton("Admin", &card_id, SC_ADMIN_ID);
-                if (card_id == SC_REGULAR_ID) {
-                    ImGui::Text("New value:");
-                    ImGui::SameLine();
-                    ImGui::InputScalar("", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
-                }
-                if (ImGui::Button("Update card")) {
-                    // perform the card update according to users wishes
-                    update_card((uint32_t)new_value, (uint32_t)card_id);
-                }
-            }
-
-            ready_changed = false;
-            ImGui::End();
-        }
 
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
         if (show_demo_window)
@@ -247,8 +181,6 @@ int main(int, char**)
 
         glfwSwapBuffers(window);
     }
-
-    scard_user_thread_stop();
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();

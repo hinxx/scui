@@ -1,26 +1,18 @@
-// dear imgui: standalone example application for GLFW + OpenGL 3, using programmable pipeline
+// dear imgui: standalone example application for GLFW + OpenGL2, using legacy fixed pipeline
 // If you are new to dear imgui, see examples/README.txt and documentation at the top of imgui.cpp.
 // (GLFW is a cross-platform general purpose library for handling windows, inputs, OpenGL/Vulkan graphics context creation, etc.)
 
+// **DO NOT USE THIS CODE IF YOUR CODE/ENGINE IS USING MODERN OPENGL (SHADERS, VBO, VAO, etc.)**
+// **Prefer using the code in the example_glfw_opengl2/ folder**
+// See imgui_impl_glfw.cpp for details.
+
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
+#include "imgui_impl_opengl2.h"
 #include <stdio.h>
-
-// About OpenGL function loaders: modern OpenGL doesn't have a standard header file and requires individual function pointers to be loaded manually.
-// Helper libraries are often used for this purpose! Here we are supporting a few common ones: gl3w, glew, glad.
-// You may use another loader/header of your choice (glext, glLoadGen, etc.), or chose to manually implement your own.
-#if defined(IMGUI_IMPL_OPENGL_LOADER_GL3W)
-#include <GL/gl3w.h>    // Initialize with gl3wInit()
-#elif defined(IMGUI_IMPL_OPENGL_LOADER_GLEW)
-#include <GL/glew.h>    // Initialize with glewInit()
-#elif defined(IMGUI_IMPL_OPENGL_LOADER_GLAD)
-#include <glad/glad.h>  // Initialize with gladLoadGL()
-#else
-#include IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
 #endif
-
-// Include glfw3.h after our OpenGL definitions
 #include <GLFW/glfw3.h>
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
@@ -29,9 +21,6 @@
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif
-
-// SCard API
-#include "scard.h"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -44,47 +33,11 @@ int main(int, char**)
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
         return 1;
-
-    // Decide GL+GLSL versions
-#if __APPLE__
-    // GL 3.2 + GLSL 150
-    const char* glsl_version = "#version 150";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
-#else
-    // GL 3.0 + GLSL 130
-    const char* glsl_version = "#version 130";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-    //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
-#endif
-
-    // Create window with graphics context
-    // GLFWwindow* window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
-    GLFWwindow* window = glfwCreateWindow(640, 720, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL2 example", NULL, NULL);
     if (window == NULL)
         return 1;
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // Enable vsync
-
-    // Initialize OpenGL loader
-#if defined(IMGUI_IMPL_OPENGL_LOADER_GL3W)
-    bool err = gl3wInit() != 0;
-#elif defined(IMGUI_IMPL_OPENGL_LOADER_GLEW)
-    bool err = glewInit() != GLEW_OK;
-#elif defined(IMGUI_IMPL_OPENGL_LOADER_GLAD)
-    bool err = gladLoadGL() == 0;
-#else
-    bool err = false; // If you use IMGUI_IMPL_OPENGL_LOADER_CUSTOM, your loader is likely to requires some form of initialization.
-#endif
-    if (err)
-    {
-        fprintf(stderr, "Failed to initialize OpenGL loader!\n");
-        return 1;
-    }
 
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
@@ -99,7 +52,7 @@ int main(int, char**)
 
     // Setup Platform/Renderer bindings
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init(glsl_version);
+    ImGui_ImplOpenGL2_Init();
 
     // Load Fonts
     // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
@@ -116,23 +69,10 @@ int main(int, char**)
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
     //IM_ASSERT(font != NULL);
 
-    // FONT
-    // io.Fonts->AddFontDefault();
-    // ImFont* font = io.Fonts->AddFontFromFileTTF("./Cousine-Regular.ttf", 25.0f);
-    // IM_ASSERT(font != NULL);
-
+    // Our state
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-    static ImU8 new_value = 2;
-    const ImU8 u8_one = 1;
-    int card_id = 0;
-    bool ready = false;
-    bool ready_changed = false;
-
-    scard_user_thread_start();
-
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -145,59 +85,9 @@ int main(int, char**)
         glfwPollEvents();
 
         // Start the Dear ImGui frame
-        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplOpenGL2_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-
-        // SCard window
-        {
-            if (ready != is_card_ready()) {
-                ready = is_card_ready();
-                ready_changed = true;
-            }
-
-            ImGui::Begin("Sole Card UI 0.0.3");
-
-            // FONT
-            // ImGui::Text("Hello"); // use the default font (which is the first loaded font)
-            // ImGui::PushFont(font);
-            // ImGui::Text("Hello with another font");
-            // ImGui::PopFont();
-
-            ImGui::Text("Reader attached: %s (%s)", scard_reader_presence() ? "YES" : "NO", scard_reader_name());
-            ImGui::Text("Card inserted: %s", scard_card_presence() ? "YES" : "NO");
-            ImGui::Text("Card pin retries: %u", scard_get_pin_retries());
-
-            ImGui::Text("User info:");
-            ImGui::Text(" Magic: %u", scard_get_pin_user_magic());
-            ImGui::Text("    ID: %u", scard_get_pin_user_id());
-            ImGui::Text(" Value: %u", scard_get_pin_user_value());
-            ImGui::Text(" Total: %u", scard_get_pin_user_total());
-
-            if (ready) {
-                // if ready change was detected and we card is present set the initial card ID
-                // and reset the new user initial value to default
-                if (ready_changed) {
-                    card_id = scard_get_pin_user_id();
-                    new_value = 2;
-                }
-                ImGui::Text("Card type:"); ImGui::SameLine();
-                ImGui::RadioButton("Regular", &card_id, SC_REGULAR_ID); ImGui::SameLine();
-                ImGui::RadioButton("Admin", &card_id, SC_ADMIN_ID);
-                if (card_id == SC_REGULAR_ID) {
-                    ImGui::Text("New value:");
-                    ImGui::SameLine();
-                    ImGui::InputScalar("", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
-                }
-                if (ImGui::Button("Update card")) {
-                    // perform the card update according to users wishes
-                    update_card((uint32_t)new_value, (uint32_t)card_id);
-                }
-            }
-
-            ready_changed = false;
-            ImGui::End();
-        }
 
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
         if (show_demo_window)
@@ -243,15 +133,21 @@ int main(int, char**)
         glViewport(0, 0, display_w, display_h);
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+        // If you are using this code with non-legacy OpenGL header/contexts (which you should not, prefer using imgui_impl_opengl3.cpp!!), 
+        // you may need to backup/reset/restore current shader using the commented lines below.
+        //GLint last_program; 
+        //glGetIntegerv(GL_CURRENT_PROGRAM, &last_program);
+        //glUseProgram(0);
+        ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+        //glUseProgram(last_program);
+
+        glfwMakeContextCurrent(window);
         glfwSwapBuffers(window);
     }
 
-    scard_user_thread_stop();
-
     // Cleanup
-    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplOpenGL2_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 

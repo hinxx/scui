@@ -14,39 +14,16 @@
 #CXX = g++
 #CXX = clang++
 
-EXE = scui
+EXE = example_glfw_opengl2
 SOURCES = main.cpp
-SOURCES += ./imgui/examples/imgui_impl_glfw.cpp ./imgui/examples/imgui_impl_opengl3.cpp
-SOURCES += ./imgui/imgui.cpp ./imgui/imgui_demo.cpp ./imgui/imgui_draw.cpp ./imgui/imgui_widgets.cpp
+SOURCES += ../imgui_impl_glfw.cpp ../imgui_impl_opengl2.cpp
+SOURCES += ../../imgui.cpp ../../imgui_demo.cpp ../../imgui_draw.cpp ../../imgui_widgets.cpp
 OBJS = $(addsuffix .o, $(basename $(notdir $(SOURCES))))
 UNAME_S := $(shell uname -s)
 
-CXXFLAGS = -I./imgui -I./imgui/examples
+CXXFLAGS = -I../ -I../../
 CXXFLAGS += -g -Wall -Wformat
 LIBS =
-
-##---------------------------------------------------------------------
-## OPENGL LOADER
-##---------------------------------------------------------------------
-
-## Using OpenGL loader: gl3w [default]
-SOURCES += ./imgui/examples/libs/gl3w/GL/gl3w.c
-CXXFLAGS += -I./imgui/examples/libs/gl3w
-
-## Using OpenGL loader: glew
-## (This assumes a system-wide installation)
-# CXXFLAGS += -lGLEW -DIMGUI_IMPL_OPENGL_LOADER_GLEW
-
-## Using OpenGL loader: glad
-# SOURCES += ../libs/glad/src/glad.c
-# CXXFLAGS += -I../libs/glad/include -DIMGUI_IMPL_OPENGL_LOADER_GLAD
-
-##---------------------------------------------------------------------
-## SCUI SOURCES
-##---------------------------------------------------------------------
-SOURCES += ./scard.cpp
-SOURCES += ./scard_user.cpp
-
 
 ##---------------------------------------------------------------------
 ## BUILD FLAGS PER PLATFORM
@@ -55,13 +32,8 @@ SOURCES += ./scard_user.cpp
 ifeq ($(UNAME_S), Linux) #LINUX
 	ECHO_MESSAGE = "Linux"
 	LIBS += -lGL `pkg-config --static --libs glfw3`
-	# use system pcsc lite libs
-	LIBS += `pkg-config --libs libpcsclite`
 
 	CXXFLAGS += `pkg-config --cflags glfw3`
-	# use system pcsc lite clags
-	CXXFLAGS += `pkg-config --cflags libpcsclite`
-	CXXFLAGS += -lpthread
 	CFLAGS = $(CXXFLAGS)
 endif
 
@@ -80,7 +52,7 @@ ifeq ($(findstring MINGW,$(UNAME_S)),MINGW)
 	ECHO_MESSAGE = "MinGW"
 	LIBS += -lglfw3 -lgdi32 -lopengl32 -limm32
 
-	CXXFLAGS += `pkg-config --cflags glfw3`
+	CXXFLAGS += -I../libs/gl3w `pkg-config --cflags glfw3`
 	CFLAGS = $(CXXFLAGS)
 endif
 
@@ -91,17 +63,11 @@ endif
 %.o:%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-%.o:./imgui/%.cpp
+%.o:../%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-%.o:./imgui/examples/%.cpp
+%.o:../../%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
-
-%.o:./imgui/examples/libs/gl3w/GL/%.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-%.o:../libs/glad/src/%.c
-	$(CC) $(CFLAGS) -c -o $@ $<
 
 all: $(EXE)
 	@echo Build complete for $(ECHO_MESSAGE)
@@ -111,3 +77,4 @@ $(EXE): $(OBJS)
 
 clean:
 	rm -f $(EXE) $(OBJS)
+
