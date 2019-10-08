@@ -45,10 +45,9 @@ CXXFLAGS += -I./gl3w
 ##---------------------------------------------------------------------
 ## SCUI SOURCES
 ##---------------------------------------------------------------------
-SOURCES += ./sc_detect_thread.cpp
-SOURCES += ./sc_access_thread.cpp
-SOURCES += ./sc_util.cpp
-SOURCES += ./sc.cpp
+SOURCES += ./scard.cpp
+SOURCES += ./scard_user.cpp
+
 
 ##---------------------------------------------------------------------
 ## BUILD FLAGS PER PLATFORM

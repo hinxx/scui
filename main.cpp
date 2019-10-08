@@ -31,7 +31,7 @@
 #endif
 
 // SCard API
-#include "sc.h"
+#include "scard.h"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -116,17 +116,22 @@ int main(int, char**)
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
     //IM_ASSERT(font != NULL);
 
+    io.Fonts->AddFontDefault();
+    ImFont* font = io.Fonts->AddFontFromFileTTF("./Cousine-Regular.ttf", 25.0f);
+    IM_ASSERT(font != NULL);
+
     bool show_demo_window = true;
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-    bool have_reader = false;
-    bool have_card = false;
-    bool connected_card = false;
-    ULONG req_id = 0;
+    static ImU8 new_value = 2;
+    const ImU8 u8_one = 1;
+    int card_id = 0;
+    bool ready = false;
+    bool ready_changed = false;
 
-    // SCard initialize
-    sc_init();
+    scard_user_thread_start();
+
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -145,64 +150,51 @@ int main(int, char**)
 
         // SCard window
         {
-            ImGui::Begin("sole UI 0.0.1");                          // Create a window called "Hello, world!" and append into it.
-
-            have_reader = sc_is_reader_attached();
-            have_card = sc_is_card_inserted();
-
-            ImGui::Text("Reader attached: %s (%s)", have_reader ? "YES" : "NO", sc_get_reader_name());      // Edit bools storing our window open/close state
-            ImGui::Text("Card inserted: %s", have_card ? "YES" : "NO");      // Edit bools storing our window open/close state
-
-            if (ImGui::Button("Card connect")) {
-                req_id = sc_request_connect();
+            if (ready != is_card_ready()) {
+                ready = is_card_ready();
+                ready_changed = true;
             }
 
-            if (ImGui::Button("Card disconnect")) {
-                req_id = sc_request_disconnect();
+            ImGui::Begin("Sole Card UI 0.0.3");
+
+            ImGui::Text("Hello"); // use the default font (which is the first loaded font)
+            ImGui::PushFont(font);
+            ImGui::Text("Hello with another font");
+            ImGui::PopFont();
+
+            ImGui::Text("Reader attached: %s (%s)", scard_reader_presence() ? "YES" : "NO", scard_reader_name());
+            ImGui::Text("Card inserted: %s", scard_card_presence() ? "YES" : "NO");
+            ImGui::Text("Card pin retries: %u", scard_get_pin_retries());
+
+            ImGui::Text("User info:");
+            ImGui::Text(" Magic: %u", scard_get_pin_user_magic());
+            ImGui::Text("    ID: %u", scard_get_pin_user_id());
+            ImGui::Text(" Value: %u", scard_get_pin_user_value());
+            ImGui::Text(" Total: %u", scard_get_pin_user_total());
+
+            if (ready) {
+                // if ready change was detected and we card is present set the initial card ID
+                // and reset the new user initial value to default
+                if (ready_changed) {
+                    card_id = scard_get_pin_user_id();
+                    new_value = 2;
+                }
+                ImGui::Text("Card type:"); ImGui::SameLine();
+                ImGui::RadioButton("Regular", &card_id, SC_REGULAR_ID); ImGui::SameLine();
+                ImGui::RadioButton("Admin", &card_id, SC_ADMIN_ID);
+                if (card_id == SC_REGULAR_ID) {
+                    ImGui::Text("New value:");
+                    ImGui::SameLine();
+                    ImGui::InputScalar("", ImGuiDataType_U8, &new_value, &u8_one, NULL, "%u");
+                }
+                if (ImGui::Button("Update card")) {
+                    // perform the card update according to users wishes
+                    update_card((uint32_t)new_value, (uint32_t)card_id);
+                }
             }
 
-            if (ImGui::Button("Get reader info")) {
-                req_id = sc_request_reader_info();
-            }
-
-            if (ImGui::Button("Select memory card")) {
-                req_id = sc_request_select_card();
-            }
-
-            if (ImGui::Button("Read memory card")) {
-                req_id = sc_request_read_card();
-            }
-
-            if (ImGui::Button("Read error counter")) {
-                req_id = sc_request_error_counter();
-            }
-
-            if (ImGui::Button("Present PIN")) {
-                req_id = sc_request_present_pin();
-            }
-
-            if (ImGui::Button("Change PIN")) {
-                req_id = sc_request_change_pin();
-            }
-
-            if (ImGui::Button("Write memory card")) {
-                req_id = sc_request_write_card();
-            }
-
-            connected_card = sc_is_card_connected();
-            ImGui::Text("Card connected: %s", connected_card ? "YES" : "NO");
-
-            ImGui::Text("Req ID: %lu", req_id);
-
-            // handled_req_id = sc_handled_request();
-            ImGui::Text("Handled Req ID %lu: %s", req_id, sc_is_request_handled() ? "YES" : "NO");
-
-            // if card or reader disappeared, and card was connected; disconnect card!
-            if (! (have_card && have_reader) && connected_card) {
-                req_id = sc_request_disconnect();
-            }
-
-            ImGui::End();            
+            ready_changed = false;
+            ImGui::End();
         }
 
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
@@ -254,8 +246,7 @@ int main(int, char**)
         glfwSwapBuffers(window);
     }
 
-    // SCard destroy
-    sc_destroy();
+    scard_user_thread_stop();
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
